@@ -5,7 +5,7 @@ export default class Clone extends Clip {
 	original: Clip;
 
 	constructor(original: Clip) {
-		super({ url: original.url });
+		super({ context:original.context, url: original.url });
 		this.original = original;
 	}
 

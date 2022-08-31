@@ -1,7 +1,6 @@
 import { Loader, FetchLoader, XhrLoader } from './Loader';
 import Chunk from './Chunk';
 import Clone from './Clone';
-import getContext from './getContext';
 import { slice } from './utils/buffer';
 import isFrameHeader from './utils/isFrameHeader';
 import parseMetadata from './utils/parseMetadata';
@@ -28,12 +27,24 @@ export default class Clip {
 	loop: boolean;
 
 	callbacks: Record<string, Array<(data?: any) => void>> = {};
-	context: AudioContext = getContext();
+	context: AudioContext;
 
 	buffered = 0;
 	length = 0;
-	loaded = false;
-	canplaythrough = false;
+	private _loaded = false;
+	public get loaded() {
+		return this._loaded;
+	}
+	public set loaded(value) {
+		this._loaded = value;
+	}
+	private _canplaythrough = false;
+	public get canplaythrough() {
+		return this._canplaythrough;
+	}
+	public set canplaythrough(value) {
+		this._canplaythrough = value;
+	}
 	loader: Loader;
 	metadata: Metadata;
 	playing = false;
@@ -41,7 +52,13 @@ export default class Clip {
 
 	_startTime: number;
 	_currentTime = 0;
-	_chunks: Chunk[] = [];
+	private __chunks: Chunk[] = [];
+	public get _chunks(): Chunk[] {
+		return this.__chunks;
+	}
+	public set _chunks(value: Chunk[]) {
+		this.__chunks = value;
+	}
 	_contextTimeAtStart: number;
 	_connected: boolean;
 	_volume: number;
@@ -49,7 +66,8 @@ export default class Clip {
 	_loadStarted: boolean;
 	_referenceHeader: RawMetadata;
 
-	constructor({ url, loop, volume }: { url: string, loop?: boolean, volume?: number }) {
+	constructor({ context, url, loop, volume }: { context: AudioContext, url: string, loop?: boolean, volume?: number }) {
+		this.context = context;
 		this.url = url;
 		this.loop = loop || false;
 
@@ -208,7 +226,7 @@ export default class Clip {
 			});
 		}
 
-		return new Promise((fulfil, reject) => {
+		return new Promise<void>((fulfil, reject) => {
 			const ready = bufferToCompletion ? this.loaded : this.canplaythrough;
 
 			if (ready) {
