@@ -5,7 +5,8 @@
         "noImplicitThis": true,
         "noEmitOnError": true,
         "lib": ["es5", "es6", "dom"],
-        "target": "es5"
+        "target": "es5",
+        "moduleResolution": "node"
     },
     "module": "ES6",
     "include": [

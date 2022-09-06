@@ -4,7 +4,7 @@
   "version": "1.6.0",
   "main": "dist/phonograph.umd.js",
   "module": "dist/phonograph.es.js",
-  "types": "src/index.d.ts",
+  "types": "dist/types.d.ts",
   "files": [
     "src",
     "dist",

@@ -2,7 +2,7 @@ import Clip from './Clip';
 import { slice } from './utils/buffer.js';
 import isFrameHeader from './utils/isFrameHeader.js';
 import getFrameLength from './utils/getFrameLength.js';
-import { AudioContext, GainNode, IAudioBufferSourceNode, IAudioNode } from 'standardized-audio-context';
+import { AudioContext, IAudioBufferSourceNode } from 'standardized-audio-context';
 
 export default class Chunk {
 	clip: Clip;
