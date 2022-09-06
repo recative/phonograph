@@ -6,6 +6,7 @@ import isFrameHeader from './utils/isFrameHeader';
 import parseMetadata from './utils/parseMetadata';
 import warn from './utils/warn';
 import { Metadata, RawMetadata } from './interfaces';
+import { AudioContext, GainNode, IAudioBufferSourceNode, IAudioNode } from 'standardized-audio-context';
 
 const CHUNK_SIZE = 64 * 1024;
 const OVERLAP = 0.2;
@@ -62,7 +63,7 @@ export default class Clip {
 	_contextTimeAtStart: number;
 	_connected: boolean;
 	_volume: number;
-	_gain: GainNode;
+	_gain: GainNode<AudioContext>;
 	_loadStarted: boolean;
 	_referenceHeader: RawMetadata;
 
@@ -242,7 +243,7 @@ export default class Clip {
 		return new Clone(this);
 	}
 
-	connect(destination: AudioNode, output?: number, input?: number) {
+	connect(destination: IAudioNode<AudioContext>, output?: number, input?: number) {
 		if (!this._connected) {
 			this._gain.disconnect();
 			this._connected = true;
@@ -252,7 +253,7 @@ export default class Clip {
 		return this;
 	}
 
-	disconnect(destination: AudioNode, output?: number, input?: number) {
+	disconnect(destination: IAudioNode<AudioContext>, output?: number, input?: number) {
 		this._gain.disconnect(destination, output, input);
 	}
 
@@ -439,8 +440,8 @@ export default class Clip {
 		const i = chunkIndex++ % this._chunks.length;
 
 		let chunk = this._chunks[i];
-		let previousSource: AudioBufferSourceNode;
-		let currentSource: AudioBufferSourceNode;
+		let previousSource: IAudioBufferSourceNode<AudioContext>;
+		let currentSource: IAudioBufferSourceNode<AudioContext>;
 
 		chunk.createSource(
 			timeOffset,

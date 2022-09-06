@@ -2,6 +2,7 @@ import Clip from './Clip';
 import { slice } from './utils/buffer.js';
 import isFrameHeader from './utils/isFrameHeader.js';
 import getFrameLength from './utils/getFrameLength.js';
+import { AudioContext, GainNode, IAudioBufferSourceNode, IAudioNode } from 'standardized-audio-context';
 
 export default class Chunk {
 	clip: Clip;
@@ -85,7 +86,7 @@ export default class Chunk {
 		this._ready();
 	}
 
-	createSource(timeOffset: number, callback: (source: AudioBufferSourceNode) => void, errback: (error: Error) => void) {
+	createSource(timeOffset: number, callback: (source: IAudioBufferSourceNode<AudioContext>) => void, errback: (error: Error) => void) {
 		if (!this.ready) {
 			throw new Error(
 				'Something went wrong! Chunk was not ready in time for playback'
