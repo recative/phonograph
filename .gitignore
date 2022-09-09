@@ -5,3 +5,6 @@ dist
 *.js
 *.d.ts
 !rollup.config.js
+
+demo/main.js
+demo/main.js.map

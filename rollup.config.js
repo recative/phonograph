@@ -1,7 +1,8 @@
-import dts from "rollup-plugin-dts";
-import resolve from "@rollup/plugin-node-resolve";
+import dts from 'rollup-plugin-dts';
+import cjs from '@rollup/plugin-commonjs';
+import resolve from '@rollup/plugin-node-resolve';
 import sucrase from '@rollup/plugin-sucrase';
-import external from "rollup-plugin-peer-deps-external";
+import external from 'rollup-plugin-peer-deps-external';
 
 const packageJson = require("./package.json");
 
@@ -61,8 +62,29 @@ export default [
       resolve({
         extensions: ['.js', '.ts']
       }),
+      cjs(),
       sucrase({
         exclude: ['node_modules/**'],
+        transforms: ['typescript']
+      }),
+    ]
+  },
+  {
+    input: 'demo/main.ts',
+    output: [
+      {
+        file: 'demo/main.js',
+        format: 'iife',
+        sourcemap: true,
+      }
+    ],
+    plugins: [
+      resolve({
+        extensions: ['.js', '.ts', '.mjs', '.cjs', '.json', '.node'],
+        preferBuiltins: false,
+      }),
+      cjs(),
+      sucrase({
         transforms: ['typescript']
       }),
     ]
