@@ -1,8 +1,9 @@
 import Clip from './Clip';
-import { slice } from './utils/buffer.js';
-import isFrameHeader from './utils/isFrameHeader.js';
-import getFrameLength from './utils/getFrameLength.js';
 import { AudioContext, IAudioBufferSourceNode } from 'standardized-audio-context';
+import { slice } from './utils/buffer';
+import parseFrameHeader from './utils/parseFrameHeader';
+import getFrameLength from './utils/getFrameLength';
+import parseMetadata from './utils/parseMetadata';
 
 export default class Chunk {
 	clip: Clip;
@@ -53,7 +54,7 @@ export default class Chunk {
 				// filthy hack taken from http://stackoverflow.com/questions/10365335/decodeaudiodata-returning-a-null-error
 				// Thanks Safari developers, you absolute numpties
 				for (; this._firstByte < raw.length - 1; this._firstByte += 1) {
-					if (isFrameHeader(raw, this._firstByte, clip._referenceHeader)) {
+					if (parseFrameHeader(raw, this._firstByte)) {
 						return decode(callback, errback);
 					}
 				}
@@ -64,17 +65,23 @@ export default class Chunk {
 
 		decode(() => {
 			let numFrames = 0;
+			let duration = 0;
 
 			for (let i = this._firstByte; i < this.raw.length; i += 1) {
-				if (isFrameHeader(this.raw, i, clip._referenceHeader)) {
+				const rawMetadata = parseFrameHeader(this.raw, i);
+				
+				if (rawMetadata) {
 					numFrames += 1;
 
-					const frameLength = getFrameLength(this.raw, i, clip.metadata);
+					const metadata = parseMetadata(rawMetadata);
+
+					const frameLength = getFrameLength(this.raw, i, metadata);
 					i += frameLength - Math.min(frameLength, 4);
+					duration += 1152 / metadata.sampleRate;
 				}
 			}
 
-			this.duration = numFrames * 1152 / clip.metadata.sampleRate;
+			this.duration = duration;
 			this._ready();
 		}, onerror);
 	}

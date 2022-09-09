@@ -2,7 +2,7 @@ import { Loader, FetchLoader, XhrLoader } from './Loader';
 import Chunk from './Chunk';
 import Clone from './Clone';
 import { slice } from './utils/buffer';
-import isFrameHeader from './utils/isFrameHeader';
+import parseFrameHeader from './utils/parseFrameHeader';
 import parseMetadata from './utils/parseMetadata';
 import warn from './utils/warn';
 import { Metadata, RawMetadata } from './interfaces';
@@ -163,17 +163,10 @@ export default class Clip {
 					if (!this.metadata) {
 						for (let i = 0; i < uint8Array.length; i += 1) {
 							// determine some facts about this mp3 file from the initial header
-							if (
-								uint8Array[i] === 0b11111111 &&
-								(uint8Array[i + 1] & 0b11110000) === 0b11110000
-							) {
+							const frameHeader = parseFrameHeader(uint8Array);
+							if (frameHeader) {
 								// http://www.datavoyage.com/mpgscript/mpeghdr.htm
-								this._referenceHeader = {
-									mpegVersion: uint8Array[i + 1] & 0b00001000,
-									mpegLayer: uint8Array[i + 1] & 0b00000110,
-									sampleRate: uint8Array[i + 2] & 0b00001100,
-									channelMode: uint8Array[i + 3] & 0b11000000
-								};
+								this._referenceHeader = frameHeader;
 
 								this.metadata = parseMetadata(this._referenceHeader);
 
@@ -187,7 +180,7 @@ export default class Clip {
 						// the next frame header then drain it
 						if (
 							p > CHUNK_SIZE + 4 &&
-							isFrameHeader(uint8Array, i, this._referenceHeader)
+							parseFrameHeader(uint8Array, i)
 						) {
 							drainBuffer();
 						}
@@ -231,7 +224,7 @@ export default class Clip {
 			const ready = bufferToCompletion ? this.loaded : this.canplaythrough;
 
 			if (ready) {
-				fulfil();
+				fulfil(null);
 			} else {
 				this.once(bufferToCompletion ? 'load' : 'canplaythrough', fulfil);
 				this.once('loaderror', reject);
