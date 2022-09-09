@@ -44,4 +44,27 @@ export default [
     ],
     plugins: [dts()],
   },
+  {
+    input: 'src/index.ts',
+    output: [
+      {
+        file: packageJson.browser,
+        format: 'umd',
+        name: 'Phonograph',
+        sourcemap: true
+      }
+    ],
+    plugins: [
+      external({
+        includeDependencies: true
+      }),
+      resolve({
+        extensions: ['.js', '.ts']
+      }),
+      sucrase({
+        exclude: ['node_modules/**'],
+        transforms: ['typescript']
+      }),
+    ]
+  },
 ];
