@@ -1,11 +1,13 @@
 import type { IAdapter } from '../IAdapter';
 import getFrameLength from './getFrameLength';
-import parseFrameHeader from './parseFrameHeader';
+import parseFrameHeader from './parseHeader';
 import parseMetadata from './parseMetadata';
 
 import { Metadata } from './types';
+import { validateHeader } from './validateHeader';
 
 export const mp3Adapter: IAdapter<Metadata> = {
+  validateChunk: validateHeader,
   getChunkLength: (rawData, metadata, index) => {
     return getFrameLength(rawData, index, metadata);
   },

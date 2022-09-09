@@ -59,7 +59,7 @@ export default class Chunk <Metadata>{
 				// filthy hack taken from http://stackoverflow.com/questions/10365335/decodeaudiodata-returning-a-null-error
 				// Thanks Safari developers, you absolute numpties
 				for (; this._firstByte < raw.length - 1; this._firstByte += 1) {
-					if (this.adapter.getChunkMetadata(raw, this._firstByte)) {
+					if (this.adapter.validateChunk(raw, this._firstByte)) {
 						return decode(callback, errback);
 					}
 				}
@@ -73,9 +73,9 @@ export default class Chunk <Metadata>{
 			let duration = 0;
 
 			for (let i = this._firstByte; i < this.raw.length; i += 1) {
-				const metadata = this.adapter.getChunkMetadata(this.raw, i);
 				
-				if (metadata) {
+				if (this.adapter.validateChunk(this.raw, i)) {
+					const metadata = this.adapter.getChunkMetadata(this.raw, i);
 					numFrames += 1;
 
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);

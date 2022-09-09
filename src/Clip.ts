@@ -181,8 +181,8 @@ export default class Clip<Metadata> {
 					if (!this.metadata) {
 						for (let i = 0; i < uint8Array.length; i += 1) {
 							// determine some facts about this mp3 file from the initial header
-							const metadata = this.adapter.getChunkMetadata(uint8Array);
-							if (metadata) {
+							if (this.adapter.validateChunk(uint8Array)) {
+								const metadata = this.adapter.getChunkMetadata(uint8Array);
 								this.metadata = metadata;
 
 								break;
@@ -195,7 +195,7 @@ export default class Clip<Metadata> {
 						// the next frame header then drain it
 						if (
 							p > CHUNK_SIZE + 4 &&
-							this.adapter.getChunkMetadata(uint8Array, i)
+							this.adapter.validateChunk(uint8Array, i)
 						) {
 							drainBuffer();
 						}

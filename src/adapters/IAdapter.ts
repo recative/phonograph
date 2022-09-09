@@ -1,4 +1,8 @@
 export interface IAdapter<Metadata> {
+  validateChunk: (
+    rawData: Uint8Array,
+    index?: number,
+  ) => boolean,
   getChunkLength: (
     rawData: Uint8Array,
     metadata: Metadata,
