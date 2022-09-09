@@ -1,12 +1,16 @@
-import { Loader, FetchLoader, XhrLoader } from './Loader';
+import {
+	AudioContext,
+	GainNode,
+	IAudioBufferSourceNode,
+	IAudioNode
+} from 'standardized-audio-context';
+
+import warn from './utils/warn';
 import Chunk from './Chunk';
 import Clone from './Clone';
 import { slice } from './utils/buffer';
-import parseFrameHeader from './utils/parseFrameHeader';
-import parseMetadata from './utils/parseMetadata';
-import warn from './utils/warn';
-import { Metadata, RawMetadata } from './interfaces';
-import { AudioContext, GainNode, IAudioBufferSourceNode, IAudioNode } from 'standardized-audio-context';
+import { Loader, FetchLoader, XhrLoader } from './Loader';
+import { IAdapter } from './adapters/IAdapter';
 
 const CHUNK_SIZE = 64 * 1024;
 const OVERLAP = 0.2;
@@ -23,9 +27,10 @@ class PhonographError extends Error {
 	}
 }
 
-export default class Clip {
+export default class Clip<Metadata> {
 	url: string;
 	loop: boolean;
+	readonly adapter: IAdapter<Metadata>;
 
 	callbacks: Record<string, Array<(data?: any) => void>> = {};
 	context: AudioContext;
@@ -53,11 +58,11 @@ export default class Clip {
 
 	_startTime: number;
 	_currentTime = 0;
-	private __chunks: Chunk[] = [];
-	public get _chunks(): Chunk[] {
+	private __chunks: Chunk<Metadata>[] = [];
+	public get _chunks(): Chunk<Metadata>[] {
 		return this.__chunks;
 	}
-	public set _chunks(value: Chunk[]) {
+	public set _chunks(value: Chunk<Metadata>[]) {
 		this.__chunks = value;
 	}
 	_contextTimeAtStart: number;
@@ -65,12 +70,24 @@ export default class Clip {
 	_volume: number;
 	_gain: GainNode<AudioContext>;
 	_loadStarted: boolean;
-	_referenceHeader: RawMetadata;
 
-	constructor({ context, url, loop, volume }: { context: AudioContext, url: string, loop?: boolean, volume?: number }) {
-		this.context = context;
+	constructor({
+		context,
+		url,
+		loop,
+		volume,
+		adapter
+	}: { 
+		context?: AudioContext, 
+		url: string, 
+		loop?: boolean, 
+		volume?: number,
+		adapter: IAdapter<Metadata>
+	 }) {
+		this.context = context || new AudioContext();
 		this.url = url;
 		this.loop = loop || false;
+		this.adapter = adapter;
 
 		this.loader = new (window.fetch ? FetchLoader : XhrLoader)(url);
 
@@ -132,7 +149,7 @@ export default class Clip {
 				const isFirstChunk = this._chunks.length === 0;
 				const firstByte = isFirstChunk ? 32 : 0;
 
-				const chunk = new Chunk({
+				const chunk = new Chunk<Metadata>({
 					clip: this,
 					raw: slice(tempBuffer, firstByte, p),
 					onready: this.canplaythrough ? null : checkCanplaythrough,
@@ -140,7 +157,8 @@ export default class Clip {
 						error.url = this.url;
 						error.phonographCode = 'COULD_NOT_DECODE';
 						this._fire('loaderror', error);
-					}
+					},
+					adapter: this.adapter,
 				});
 
 				const lastChunk = this._chunks[this._chunks.length - 1];
@@ -163,12 +181,9 @@ export default class Clip {
 					if (!this.metadata) {
 						for (let i = 0; i < uint8Array.length; i += 1) {
 							// determine some facts about this mp3 file from the initial header
-							const frameHeader = parseFrameHeader(uint8Array);
-							if (frameHeader) {
-								// http://www.datavoyage.com/mpgscript/mpeghdr.htm
-								this._referenceHeader = frameHeader;
-
-								this.metadata = parseMetadata(this._referenceHeader);
+							const metadata = this.adapter.getChunkMetadata(uint8Array);
+							if (metadata) {
+								this.metadata = metadata;
 
 								break;
 							}
@@ -180,7 +195,7 @@ export default class Clip {
 						// the next frame header then drain it
 						if (
 							p > CHUNK_SIZE + 4 &&
-							parseFrameHeader(uint8Array, i)
+							this.adapter.getChunkMetadata(uint8Array, i)
 						) {
 							drainBuffer();
 						}
@@ -233,7 +248,7 @@ export default class Clip {
 	}
 
 	clone() {
-		return new Clone(this);
+		return new Clone<Metadata>(this);
 	}
 
 	connect(destination: IAudioNode<AudioContext>, output?: number, input?: number) {

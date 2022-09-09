@@ -1,18 +1,19 @@
-import Clip from './Clip';
 import { AudioContext, IAudioBufferSourceNode } from 'standardized-audio-context';
-import { slice } from './utils/buffer';
-import parseFrameHeader from './utils/parseFrameHeader';
-import getFrameLength from './utils/getFrameLength';
-import parseMetadata from './utils/parseMetadata';
 
-export default class Chunk {
-	clip: Clip;
+import { slice } from './utils/buffer';
+import { IAdapter } from './adapters/IAdapter';
+
+import Clip from './Clip';
+
+export default class Chunk <Metadata>{
+	clip: Clip<Metadata>;
 	context: AudioContext;
 	duration: number;
 	raw: Uint8Array;
 	extended: Uint8Array;
 	ready: boolean;
-	next: Chunk;
+	next: Chunk<Metadata>;
+	readonly adapter: IAdapter<Metadata>;
 
 	_attached: boolean;
 	_callback: () => void;
@@ -22,18 +23,22 @@ export default class Chunk {
 		clip,
 		raw,
 		onready,
-		onerror
+		onerror,
+		adapter,
 	}: {
-		clip: Clip;
+		clip: Clip<Metadata>;
 		raw: Uint8Array;
 		onready: () => void;
 		onerror: (error: Error) => void;
+		adapter: IAdapter<Metadata>
 	}) {
 		this.clip = clip;
 		this.context = clip.context;
 
 		this.raw = raw;
 		this.extended = null;
+
+		this.adapter = adapter;
 
 		this.duration = null;
 		this.ready = false;
@@ -54,7 +59,7 @@ export default class Chunk {
 				// filthy hack taken from http://stackoverflow.com/questions/10365335/decodeaudiodata-returning-a-null-error
 				// Thanks Safari developers, you absolute numpties
 				for (; this._firstByte < raw.length - 1; this._firstByte += 1) {
-					if (parseFrameHeader(raw, this._firstByte)) {
+					if (this.adapter.getChunkMetadata(raw, this._firstByte)) {
 						return decode(callback, errback);
 					}
 				}
@@ -68,16 +73,14 @@ export default class Chunk {
 			let duration = 0;
 
 			for (let i = this._firstByte; i < this.raw.length; i += 1) {
-				const rawMetadata = parseFrameHeader(this.raw, i);
+				const metadata = this.adapter.getChunkMetadata(this.raw, i);
 				
-				if (rawMetadata) {
+				if (metadata) {
 					numFrames += 1;
 
-					const metadata = parseMetadata(rawMetadata);
-
-					const frameLength = getFrameLength(this.raw, i, metadata);
+					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
 					i += frameLength - Math.min(frameLength, 4);
-					duration += 1152 / metadata.sampleRate;
+					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
 				}
 			}
 
@@ -86,7 +89,7 @@ export default class Chunk {
 		}, onerror);
 	}
 
-	attach(nextChunk: Chunk) {
+	attach(nextChunk: Chunk<Metadata>) {
 		this.next = nextChunk;
 		this._attached = true;
 

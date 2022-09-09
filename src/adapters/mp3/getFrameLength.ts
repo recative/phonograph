@@ -1,4 +1,4 @@
-import { Metadata } from '../interfaces';
+import { Metadata } from './types';
 
 // http://mpgedit.org/mpgedit/mpeg_format/mpeghdr.htm
 const bitrateLookup: Record<string, number[]> = {

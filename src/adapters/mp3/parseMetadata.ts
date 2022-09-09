@@ -1,4 +1,4 @@
-import { Metadata, RawMetadata } from '../interfaces';
+import { Metadata, RawMetadata } from './types';
 
 const mpegVersionLookup: Record<string, number> = {
 	0: 2,

@@ -1,11 +1,11 @@
-import Clip from './Clip.js';
-import Chunk from './Chunk.js';
+import Clip from './Clip';
+import Chunk from './Chunk';
 
-export default class Clone extends Clip {
-	original: Clip;
+export default class Clone<Metadata> extends Clip<Metadata> {
+	original: Clip<Metadata>;
 
-	constructor(original: Clip) {
-		super({ context:original.context, url: original.url });
+	constructor(original: Clip<Metadata>) {
+		super({ context:original.context, url: original.url, adapter: original.adapter });
 		this.original = original;
 	}
 

@@ -1,4 +1,4 @@
-import { RawMetadata } from '../interfaces';
+import { RawMetadata } from './types';
 
 // http://www.mp3-tech.org/programmer/frame_header.html
 // frame header starts with 'frame sync' – eleven 1s
