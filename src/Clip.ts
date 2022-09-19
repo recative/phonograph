@@ -70,6 +70,7 @@ export default class Clip<Metadata> {
 	_volume: number;
 	_gain: GainNode<AudioContext>;
 	_loadStarted: boolean;
+	_actualPlaying = false;
 
 	constructor({
 		context,
@@ -77,10 +78,10 @@ export default class Clip<Metadata> {
 		loop,
 		volume,
 		adapter
-	}: { 
-		context?: AudioContext, 
-		url: string, 
-		loop?: boolean, 
+	}: {
+		context?: AudioContext,
+		url: string,
+		loop?: boolean,
 		volume?: number,
 		adapter: IAdapter<Metadata>
 	 }) {
@@ -354,6 +355,7 @@ export default class Clip<Metadata> {
 		}
 
 		this.playing = false;
+		this._actualPlaying = false;
 		this._currentTime =
 			this._startTime + (this.context.currentTime - this._contextTimeAtStart);
 
@@ -363,7 +365,7 @@ export default class Clip<Metadata> {
 	}
 
 	get currentTime() {
-		if (this.playing) {
+		if (this.playing && this._actualPlaying) {
 			return (
 				this._startTime + (this.context.currentTime - this._contextTimeAtStart)
 			);
@@ -468,6 +470,7 @@ export default class Clip<Metadata> {
 
 				source.connect(gain);
 				source.start(this.context.currentTime);
+				this._actualPlaying = true;
 
 				const endGame = () => {
 					if (this.context.currentTime >= nextStart) {

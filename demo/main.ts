@@ -8,6 +8,7 @@ const clip = new Clip({
 clip.buffer().then(() => {
   const play = document.querySelector('#play') as HTMLButtonElement;
   const pause = document.querySelector('#pause') as HTMLButtonElement;
+  const progress = document.querySelector('#progress') as HTMLSpanElement;
 
   play.disabled = false;
   pause.disabled = false;
@@ -19,4 +20,18 @@ clip.buffer().then(() => {
   pause.addEventListener('click', () => {
     clip.pause();
   });
+
+  const updateProgress=()=>{
+    progress.innerText=`${clip.currentTime}`
+  }
+
+  clip.on('play',updateProgress)
+  clip.on('pause',updateProgress)
+  clip.on('ended',updateProgress)
+
+  const loop=()=>{
+    updateProgress()
+    requestAnimationFrame(loop)
+  }
+  loop()
 });

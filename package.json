@@ -41,7 +41,7 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -cw",
-    "prepublish": "npm run build && npm run build-declarations",
+    "prepublish": "npm run build",
     "test": "serve . & open http://localhost:5000/demo.html",
     "pretest": "npm run build"
   },
