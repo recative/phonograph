@@ -9,6 +9,7 @@ export default class Chunk <Metadata>{
 	clip: Clip<Metadata>;
 	context: AudioContext;
 	duration: number;
+	numFrames: number=0;
 	raw: Uint8Array;
 	extended: Uint8Array;
 	ready: boolean;
@@ -71,20 +72,23 @@ export default class Chunk <Metadata>{
 		decode(() => {
 			let numFrames = 0;
 			let duration = 0;
+			let i = this._firstByte
 
-			for (let i = this._firstByte; i < this.raw.length; i += 1) {
-				
+			while (i < this.raw.length) {
 				if (this.adapter.validateChunk(this.raw, i)) {
 					const metadata = this.adapter.getChunkMetadata(this.raw, i);
 					numFrames += 1;
 
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
-					i += frameLength - Math.min(frameLength, 4);
+					i += frameLength;
 					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
+				}else{
+					i += 1
 				}
 			}
 
 			this.duration = duration;
+			this.numFrames = numFrames;
 			this._ready();
 		}, onerror);
 	}

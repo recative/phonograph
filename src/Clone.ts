@@ -1,5 +1,4 @@
 import Clip from './Clip';
-import Chunk from './Chunk';
 
 export default class Clone<Metadata> extends Clip<Metadata> {
 	original: Clip<Metadata>;
