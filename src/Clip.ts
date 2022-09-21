@@ -84,7 +84,7 @@ export default class Clip<Metadata> {
 		loop?: boolean,
 		volume?: number,
 		adapter: IAdapter<Metadata>
-	 }) {
+	}) {
 		this.context = context || new AudioContext();
 		this.url = url;
 		this.loop = loop || false;
@@ -107,6 +107,8 @@ export default class Clip<Metadata> {
 
 			let tempBuffer = new Uint8Array(CHUNK_SIZE * 2);
 			let p = 0;
+			let processedBytes = 0;
+			let nextFrameStartBytes = 0;
 
 			let loadStartTime = Date.now();
 			let totalLoadedBytes = 0;
@@ -166,6 +168,7 @@ export default class Clip<Metadata> {
 				if (lastChunk) lastChunk.attach(chunk);
 
 				this._chunks.push(chunk);
+				processedBytes += p;
 				p = 0;
 
 				return chunk;
@@ -195,10 +198,13 @@ export default class Clip<Metadata> {
 						// once the buffer is large enough, wait for
 						// the next frame header then drain it
 						if (
-							p > CHUNK_SIZE + 4 &&
-							this.adapter.validateChunk(uint8Array, i)
+							p + processedBytes >= nextFrameStartBytes && this.adapter.validateChunk(uint8Array, i)
 						) {
-							drainBuffer();
+							const metadata = this.adapter.getChunkMetadata(uint8Array, i);
+							nextFrameStartBytes = p + processedBytes + this.adapter.getChunkLength(uint8Array, metadata, i)
+							if (p > CHUNK_SIZE + 4) {
+								drainBuffer();
+							}
 						}
 
 						// write new data to buffer

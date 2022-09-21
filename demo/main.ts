@@ -35,3 +35,5 @@ clip.buffer().then(() => {
   }
   loop()
 });
+
+(window as any).clip=clip;
