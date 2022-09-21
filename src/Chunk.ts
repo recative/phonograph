@@ -1,4 +1,4 @@
-import { AudioContext, IAudioBufferSourceNode } from 'standardized-audio-context';
+import { AudioContext, IAudioBuffer, IAudioBufferSourceNode } from 'standardized-audio-context';
 
 import { slice } from './utils/buffer';
 import { IAdapter } from './adapters/IAdapter';
@@ -80,7 +80,7 @@ export default class Chunk <Metadata>{
 					numFrames += 1;
 
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
-					i += frameLength;
+					i += Math.max(frameLength,4);
 					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
 				}else{
 					i += 1
@@ -100,7 +100,7 @@ export default class Chunk <Metadata>{
 		this._ready();
 	}
 
-	createSource(timeOffset: number, callback: (source: IAudioBufferSourceNode<AudioContext>) => void, errback: (error: Error) => void) {
+	createBuffer(timeOffset: number, callback: (source: IAudioBuffer) => void, errback: (error: Error) => void) {
 		if (!this.ready) {
 			throw new Error(
 				'Something went wrong! Chunk was not ready in time for playback'
@@ -132,10 +132,7 @@ export default class Chunk <Metadata>{
 					decoded = offset;
 				}
 
-				const source = this.context.createBufferSource();
-				source.buffer = decoded;
-
-				callback(source);
+				callback(decoded);
 			},
 			errback
 		);

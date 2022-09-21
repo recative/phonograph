@@ -453,9 +453,12 @@ export default class Clip<Metadata> {
 		let previousSource: IAudioBufferSourceNode<AudioContext>;
 		let currentSource: IAudioBufferSourceNode<AudioContext>;
 
-		chunk.createSource(
+		chunk.createBuffer(
 			timeOffset,
-			source => {
+			decoded => {
+				const source = this.context.createBufferSource();
+				source.buffer = decoded;
+
 				currentSource = source;
 
 				this._contextTimeAtStart = this.context.currentTime;
@@ -491,9 +494,11 @@ export default class Clip<Metadata> {
 					chunk = this._chunks[i];
 
 					if (chunk) {
-						chunk.createSource(
+						chunk.createBuffer(
 							0,
-							source => {
+							decoded => {
+								const source = this.context.createBufferSource();
+								source.buffer = decoded;
 								previousSource = currentSource;
 								currentSource = source;
 
