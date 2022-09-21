@@ -197,6 +197,7 @@ export default class Clip<Metadata> {
 					for (let i = 0; i < uint8Array.length; i += 1) {
 						// once the buffer is large enough, wait for
 						// the next frame header then drain it
+						// TODO: header detection may not works if the header is divided into two data segments.
 						if (
 							p + processedBytes >= nextFrameStartBytes && this.adapter.validateChunk(uint8Array, i)
 						) {
@@ -460,7 +461,6 @@ export default class Clip<Metadata> {
 		let currentSource: IAudioBufferSourceNode<AudioContext>;
 
 		chunk.createBuffer(
-			timeOffset,
 			decoded => {
 				const source = this.context.createBufferSource();
 				source.buffer = decoded;
@@ -478,7 +478,7 @@ export default class Clip<Metadata> {
 				gain.gain.setValueAtTime(0, nextStart + OVERLAP);
 
 				source.connect(gain);
-				source.start(this.context.currentTime);
+				source.start(this.context.currentTime, timeOffset);
 				this._actualPlaying = true;
 
 				const endGame = () => {
@@ -501,7 +501,6 @@ export default class Clip<Metadata> {
 
 					if (chunk) {
 						chunk.createBuffer(
-							0,
 							decoded => {
 								const source = this.context.createBufferSource();
 								source.buffer = decoded;

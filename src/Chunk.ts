@@ -100,7 +100,7 @@ export default class Chunk <Metadata>{
 		this._ready();
 	}
 
-	createBuffer(timeOffset: number, callback: (source: IAudioBuffer) => void, errback: (error: Error) => void) {
+	createBuffer(callback: (source: IAudioBuffer) => void, errback: (error: Error) => void) {
 		if (!this.ready) {
 			throw new Error(
 				'Something went wrong! Chunk was not ready in time for playback'
@@ -110,28 +110,6 @@ export default class Chunk <Metadata>{
 		this.context.decodeAudioData(
 			slice(this.extended, 0, this.extended.length).buffer,
 			decoded => {
-				if (timeOffset) {
-					const sampleOffset = ~~(timeOffset * decoded.sampleRate);
-					const numChannels = decoded.numberOfChannels;
-
-					const offset = this.context.createBuffer(
-						numChannels,
-						decoded.length - sampleOffset,
-						decoded.sampleRate
-					);
-
-					for (let chan = 0; chan < numChannels; chan += 1) {
-						const sourceData = decoded.getChannelData(chan);
-						const targetData = offset.getChannelData(chan);
-
-						for (let i = 0; i < sourceData.length - sampleOffset; i += 1) {
-							targetData[i] = sourceData[i + sampleOffset];
-						}
-					}
-
-					decoded = offset;
-				}
-
 				callback(decoded);
 			},
 			errback
