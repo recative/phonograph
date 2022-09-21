@@ -41,6 +41,7 @@ export default class Chunk<Metadata>{
 	next: Chunk<Metadata>;
 	readonly adapter: IAdapter<Metadata>;
 	readonly position: IChunkPosition;
+	readonly positions: IChunkPosition[]=[];
 
 	_attached: boolean;
 	_callback: () => void;
@@ -95,42 +96,26 @@ export default class Chunk<Metadata>{
 			let numFrames = 0;
 			let duration = 0;
 			let i = this._firstByte;
-			
-			// @ts-ignore
-			if (!window.chunkIndex) {
-				// @ts-ignore
-				window.chunkIndex = 0;
-			}
-			
-			// @ts-ignore
-			if (!window.positions) {
-				// @ts-ignore
-				window.positions = [];
-			}
 
 			while (i < this.raw.length) {
 				if (this.adapter.validateChunk(this.raw, i)) {
 					const metadata = this.adapter.getChunkMetadata(this.raw, i);
-					numFrames += 1;
 
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
 					i += frameLength;
 					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
 
-					window.positions.push({
-						index: window.chunkIndex,
+					this.positions.push({
+						index: numFrames,
 						start: i - frameLength + this.position.start,
 						end: i + this.position.start,
 					});
+					numFrames += 1;
 
-					window.chunkIndex += 1;
 				} else {
 					i += 1
 				}
 			}
-
-			// @ts-ignore
-			window.positions = positions;
 
 			this.duration = duration;
 			this.numFrames = numFrames;

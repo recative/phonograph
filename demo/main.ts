@@ -1,7 +1,7 @@
 import { Clip, mp3Adapter } from '../src/index';
 
 const clip = new Clip({
-  url: '/demo/e1p1-audio.mp3',
+  url: '/demo/test-audio/e1p1-audio.mp3',
   adapter: mp3Adapter,
 });
 
