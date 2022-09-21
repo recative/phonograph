@@ -106,7 +106,9 @@ export default class Clip<Metadata> {
 			this._loadStarted = true;
 
 			let tempBuffer = new Uint8Array(CHUNK_SIZE * 2);
+			// [p:01] This is the position where we should start handling the data in `tempBuffer`
 			let p = 0;
+			let processedBytes = 0;
 
 			let loadStartTime = Date.now();
 			let totalLoadedBytes = 0;
@@ -153,8 +155,13 @@ export default class Clip<Metadata> {
 				const chunk = new Chunk<Metadata>({
 					clip: this,
 					raw: slice(tempBuffer, firstByte, p),
+					position: {
+						start: processedBytes,
+						end: p,
+						index: this._chunks.length,
+					},
 					onready: this.canplaythrough ? null : checkCanplaythrough,
-					onerror: (error: any) => {
+					onerror: (error: PhonographError) => {
 						error.url = this.url;
 						error.phonographCode = 'COULD_NOT_DECODE';
 						this._fire('loaderror', error);
@@ -166,6 +173,8 @@ export default class Clip<Metadata> {
 				if (lastChunk) lastChunk.attach(chunk);
 
 				this._chunks.push(chunk);
+				processedBytes += p;
+				// If buffer was drained, we reset the pointer and reuse the buffer to save incoming data
 				p = 0;
 
 				return chunk;
@@ -202,6 +211,7 @@ export default class Clip<Metadata> {
 						}
 
 						// write new data to buffer
+						// [p:02] Clone incoming data into the tempBuffer, and update the pointer
 						tempBuffer[p++] = uint8Array[i];
 					}
 

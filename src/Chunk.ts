@@ -5,16 +5,42 @@ import { IAdapter } from './adapters/IAdapter';
 
 import Clip from './Clip';
 
-export default class Chunk <Metadata>{
+interface IChunkPosition {
+	start: number;
+	end: number;
+	index: number;
+}
+
+interface IChunkConfig<Metadata> {
+	clip: Clip<Metadata>;
+	raw: Uint8Array;
+	onready: () => void;
+	onerror: (error: PhonographError) => void;
+	adapter: IAdapter<Metadata>;
+	position: IChunkPosition;
+}
+
+export class PhonographError extends Error {
+	public url = '';
+  public phonographCode = '';
+
+	constructor(error: Error | string) {
+		super(typeof error === 'string' ? error : error.message);
+		this.name = typeof error === 'string' ? 'PhonographError' : error.name;
+	}
+}
+
+export default class Chunk<Metadata>{
 	clip: Clip<Metadata>;
 	context: AudioContext;
 	duration: number;
-	numFrames: number=0;
+	numFrames: number = 0;
 	raw: Uint8Array;
 	extended: Uint8Array;
 	ready: boolean;
 	next: Chunk<Metadata>;
 	readonly adapter: IAdapter<Metadata>;
+	readonly position: IChunkPosition;
 
 	_attached: boolean;
 	_callback: () => void;
@@ -26,13 +52,8 @@ export default class Chunk <Metadata>{
 		onready,
 		onerror,
 		adapter,
-	}: {
-		clip: Clip<Metadata>;
-		raw: Uint8Array;
-		onready: () => void;
-		onerror: (error: Error) => void;
-		adapter: IAdapter<Metadata>
-	}) {
+		position,
+	}: IChunkConfig<Metadata>) {
 		this.clip = clip;
 		this.context = clip.context;
 
@@ -40,6 +61,7 @@ export default class Chunk <Metadata>{
 		this.extended = null;
 
 		this.adapter = adapter;
+		this.position = position;
 
 		this.duration = null;
 		this.ready = false;
@@ -49,11 +71,11 @@ export default class Chunk <Metadata>{
 
 		this._firstByte = 0;
 
-		const decode = (callback: () => void, errback: (err: Error) => void) => {
+		const decode = (callback: () => void, errback: (err: PhonographError) => void) => {
 			const buffer = slice(raw, this._firstByte, raw.length).buffer;
 
 			this.context.decodeAudioData(buffer, callback, err => {
-				if (err) return errback(err);
+				if (err) return errback(new PhonographError(err));
 
 				this._firstByte += 1;
 
@@ -65,14 +87,26 @@ export default class Chunk <Metadata>{
 					}
 				}
 
-				errback(new Error(`Could not decode audio buffer`));
+				errback(new PhonographError(`Could not decode audio buffer`));
 			});
 		};
 
 		decode(() => {
 			let numFrames = 0;
 			let duration = 0;
-			let i = this._firstByte
+			let i = this._firstByte;
+			
+			// @ts-ignore
+			if (!window.chunkIndex) {
+				// @ts-ignore
+				window.chunkIndex = 0;
+			}
+			
+			// @ts-ignore
+			if (!window.positions) {
+				// @ts-ignore
+				window.positions = [];
+			}
 
 			while (i < this.raw.length) {
 				if (this.adapter.validateChunk(this.raw, i)) {
@@ -82,10 +116,21 @@ export default class Chunk <Metadata>{
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
 					i += frameLength;
 					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
-				}else{
+
+					window.positions.push({
+						index: window.chunkIndex,
+						start: i - frameLength + this.position.start,
+						end: i + this.position.start,
+					});
+
+					window.chunkIndex += 1;
+				} else {
 					i += 1
 				}
 			}
+
+			// @ts-ignore
+			window.positions = positions;
 
 			this.duration = duration;
 			this.numFrames = numFrames;

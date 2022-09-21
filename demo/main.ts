@@ -1,9 +1,12 @@
 import { Clip, mp3Adapter } from '../src/index';
 
 const clip = new Clip({
-  url: '/demo/deepnote.mp3',
+  url: '/demo/e1p1-audio.mp3',
   adapter: mp3Adapter,
 });
+
+// @ts-ignore For debug purpose.
+window.clip = clip;
 
 clip.buffer().then(() => {
   const play = document.querySelector('#play') as HTMLButtonElement;
@@ -21,17 +24,18 @@ clip.buffer().then(() => {
     clip.pause();
   });
 
-  const updateProgress=()=>{
-    progress.innerText=`${clip.currentTime}`
+  const updateProgress = () =>{
+    progress.innerText = `${clip.currentTime}`
   }
 
-  clip.on('play',updateProgress)
-  clip.on('pause',updateProgress)
-  clip.on('ended',updateProgress)
+  clip.on('play', updateProgress);
+  clip.on('pause', updateProgress);
+  clip.on('ended', updateProgress);
 
-  const loop=()=>{
-    updateProgress()
-    requestAnimationFrame(loop)
+  const loop = () => {
+    updateProgress();
+    requestAnimationFrame(loop);
   }
-  loop()
+
+  loop();
 });
