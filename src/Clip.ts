@@ -32,7 +32,7 @@ export default class Clip<Metadata> {
 	loop: boolean;
 	readonly adapter: IAdapter<Metadata>;
 
-	callbacks: Record<string, Array<(data?: any) => void>> = {};
+	private callbacks: Record<string, Array<(data?: any) => void>> = {};
 	context: AudioContext;
 
 	buffered = 0;
@@ -56,8 +56,8 @@ export default class Clip<Metadata> {
 	playing = false;
 	ended = false;
 
-	_startTime: number = 0;
-	_currentTime = 0;
+	private _startTime: number = 0;
+	private _currentTime = 0;
 	private __chunks: Chunk<Metadata>[] = [];
 	public get _chunks(): Chunk<Metadata>[] {
 		return this.__chunks;
@@ -65,14 +65,14 @@ export default class Clip<Metadata> {
 	public set _chunks(value: Chunk<Metadata>[]) {
 		this.__chunks = value;
 	}
-	_contextTimeAtStart: number = 0;
-	_connected: boolean = false;
-	_volume: number;
-	_gain: GainNode<AudioContext>;
-	_loadStarted: boolean = false;
-	_actualPlaying = false;
-	_currentSource: IAudioBufferSourceNode<AudioContext> | null = null
-	_nextSource: IAudioBufferSourceNode<AudioContext> | null = null
+	private _contextTimeAtStart: number = 0;
+	private _connected: boolean = false;
+	private _volume: number;
+	private _gain: GainNode<AudioContext>;
+	private _loadStarted: boolean = false;
+	private _actualPlaying = false;
+	private _currentSource: IAudioBufferSourceNode<AudioContext> | null = null
+	private _nextSource: IAudioBufferSourceNode<AudioContext> | null = null
 
 	constructor({
 		context,
@@ -225,7 +225,7 @@ export default class Clip<Metadata> {
 						totalLoadedBytes += p;
 					}
 
-					this._chunks[0].onready(() => {
+					this._chunks[0].once("ready",() => {
 						if (!this.canplaythrough) {
 							this.canplaythrough = true;
 							this._fire('canplaythrough');
@@ -415,14 +415,14 @@ export default class Clip<Metadata> {
 		this._gain.gain.value = this._volume = volume;
 	}
 
-	_fire(eventName: string, data?: any) {
+	private _fire(eventName: string, data?: any) {
 		const callbacks = this.callbacks[eventName];
 		if (!callbacks) return;
 
 		callbacks.slice().forEach(cb => cb(data));
 	}
 
-	_setupPlayback() {
+	private _setupPlayback() {
 		let chunkIndex: number;
 		let time = 0;
 		for (chunkIndex = 0; chunkIndex < this._chunks.length; chunkIndex += 1) {

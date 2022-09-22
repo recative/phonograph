@@ -16,9 +16,9 @@ export default class Chunk<Metadata>{
 	next: Chunk<Metadata> | null = null;
 	readonly adapter: IAdapter<Metadata>;
 
-	_attached: boolean;
-	_callback: (() => void) | null = null;
-	_firstByte: number;
+	private _attached: boolean;
+	private _firstByte: number;
+	private callbacks: Record<string, Array<(data?: any) => void>> = {};
 
 	constructor({
 		clip,
@@ -45,7 +45,10 @@ export default class Chunk<Metadata>{
 		this.ready = false;
 
 		this._attached = false;
-		this._callback = onready;
+		if(onready!==null){
+			this.once("ready",onready)
+		}
+		this.once("error",onerror)
 
 		this._firstByte = 0;
 
@@ -90,7 +93,43 @@ export default class Chunk<Metadata>{
 			this.duration = duration;
 			this.numFrames = numFrames;
 			this._ready();
-		}, onerror);
+		}, ()=>{
+			this._fire("error",new Error(`Could not decode audio buffer`));
+		});
+	}
+
+	off(eventName: string, cb: (data?: any) => void) {
+		const callbacks = this.callbacks[eventName];
+		if (!callbacks) return;
+
+		const index = callbacks.indexOf(cb);
+		if (~index) callbacks.splice(index, 1);
+	}
+
+	on(eventName: string, cb: (data?: any) => void) {
+		const callbacks =
+			this.callbacks[eventName] || (this.callbacks[eventName] = []);
+		callbacks.push(cb);
+
+		return {
+			cancel: () => this.off(eventName, cb)
+		};
+	}
+
+	once(eventName: string, cb: (data?: any) => void) {
+		const _cb = (data?: any) => {
+			cb(data);
+			this.off(eventName, _cb);
+		};
+
+		return this.on(eventName, _cb);
+	}
+
+	private _fire(eventName: string, data?: any) {
+		const callbacks = this.callbacks[eventName];
+		if (!callbacks) return;
+
+		callbacks.slice().forEach(cb => cb(data));
 	}
 
 	attach(nextChunk: Chunk<Metadata> | null) {
@@ -113,15 +152,7 @@ export default class Chunk<Metadata>{
 		return this.context.decodeAudioData(slice(this.extended!, 0, this.extended!.length).buffer);
 	}
 
-	onready(callback: () => void) {
-		if (this.ready) {
-			setTimeout(callback);
-		} else {
-			this._callback = callback;
-		}
-	}
-
-	_ready() {
+	private _ready() {
 		if (this.ready) return;
 
 		if (this._attached && this.duration !== null) {
@@ -149,10 +180,7 @@ export default class Chunk<Metadata>{
 						: this.raw;
 			}
 
-			if (this._callback) {
-				this._callback();
-				this._callback = null;
-			}
+			this._fire("ready")
 		}
 	}
 }
