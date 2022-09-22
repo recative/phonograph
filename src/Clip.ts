@@ -675,7 +675,6 @@ export default class Clip<Metadata> {
 		const {
 			currentChunk,
 			currentChuckStartTime,
-			currentBuffer,
 			nextBuffer,
 			pendingBuffer,
 		} = this._audioBufferCache!
@@ -710,7 +709,7 @@ export default class Clip<Metadata> {
 			this._currentGain.gain.setValueAtTime(0, this._nextStart + OVERLAP);
 			this._currentSource.connect(this._currentGain);
 			this._currentSource.start(this._contextTimeAtStart, currentChuckStartTime);
-			// TODO: setup onend
+			this._currentSource.addEventListener("end",this.onCurrentSourceEnd)
 			if (currentChunk.next !== null) {
 				this._nextSource = this.context.createBufferSource();
 				this._nextSource.buffer = nextBuffer!;
@@ -740,6 +739,7 @@ export default class Clip<Metadata> {
 		this._currentGain?.disconnect();
 		this._currentGain = this._nextGain;
 		this._currentSource = this._nextSource;
+		this._currentSource?.addEventListener("end",this.onCurrentSourceEnd)
 		const {
 			currentChuckStartTime,
 			currentChunk,
@@ -759,6 +759,46 @@ export default class Clip<Metadata> {
 		} else {
 			this._nextGain = null;
 			this._nextSource = null;
+		}
+		if(currentChunk===null){
+			this.pause()._currentTime = 0;
+			this.ended = true;
+			this._fire('ended');
+		}
+	}
+
+	// Reset audioNodes when stuck or paused
+	private resetAudioNodes() {
+		if (this._currentSource) {
+			this._currentSource.stop()
+			this._currentSource.disconnect()
+			this._currentSource = null;
+		};
+		if (this._nextSource) {
+			this._nextSource.stop()
+			this._nextSource.disconnect()
+			this._nextSource = null;
+		};
+		if (this._currentGain) {
+			this._currentGain.disconnect()
+			this._currentGain = null;
+		};
+		if (this._nextGain) {
+			this._nextGain.disconnect()
+			this._nextSource = null;
+		};
+	}
+
+	private onCurrentSourceEnd = () => {
+		if (!this.playing) {
+			return
+		}
+		this.advanceAudioBufferCache();
+		if(this.audioBufferCacheHit()){
+			this.advanceAudioNodes();
+		}else{
+			this._actualPlaying=false;
+			this.resetAudioNodes();
 		}
 	}
 }
