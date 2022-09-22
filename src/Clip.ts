@@ -3,7 +3,8 @@ import {
 	GainNode,
 	IAudioBuffer,
 	IAudioBufferSourceNode,
-	IAudioNode
+	IAudioNode,
+	IGainNode
 } from 'standardized-audio-context';
 
 import warn from './utils/warn';
@@ -30,6 +31,7 @@ class PhonographError extends Error {
 
 // A cache of audio buffers starting from current time
 interface AudioBufferCache<Metadata> {
+	currentChuckStartTime: number;
 	currentChunk: Chunk<Metadata> | null
 	currentBuffer: IAudioBuffer | null
 	nextBuffer: IAudioBuffer | null
@@ -85,6 +87,8 @@ export default class Clip<Metadata> {
 	}
 	private _currentSource: IAudioBufferSourceNode<AudioContext> | null = null
 	private _nextSource: IAudioBufferSourceNode<AudioContext> | null = null
+	private _currentGain: IGainNode<AudioContext> | null = null
+	private _nextGain: IGainNode<AudioContext> | null = null
 	private _audioBufferCache: AudioBufferCache<Metadata> | null = null
 
 	constructor({
@@ -607,6 +611,7 @@ export default class Clip<Metadata> {
 			const chunkEnd = time + chunk.duration;
 			if (chunkEnd > this._currentTime) {
 				this._audioBufferCache = {
+					currentChuckStartTime: time,
 					currentChunk: chunk,
 					currentBuffer: null,
 					nextBuffer: null,
@@ -620,8 +625,9 @@ export default class Clip<Metadata> {
 			chunk = lastChunk.next;
 		}
 		// All available Chunk visited, check if there are more chunks to be load.
-		if(lastChunk?.ready){
+		if (lastChunk?.ready) {
 			this._audioBufferCache = {
+				currentChuckStartTime: time,
 				currentChunk: null,
 				currentBuffer: null,
 				nextBuffer: null,
@@ -632,34 +638,75 @@ export default class Clip<Metadata> {
 
 	// Check is there enough audio buffer to schedule current and next chunk
 	private audioBufferCacheHit() {
-		const audioBufferCache=this._audioBufferCache
-		if(audioBufferCache===null){
+		const audioBufferCache = this._audioBufferCache
+		if (audioBufferCache === null) {
 			return false;
 		}
 		const {
 			currentChunk,
 			currentBuffer,
 			nextBuffer,
-		}=audioBufferCache
-		if(currentChunk===null){
+		} = audioBufferCache
+		if (currentChunk === null) {
 			return true;
 		}
-		if(!currentChunk.ready){
+		if (!currentChunk.ready) {
 			return false;
 		}
-		if(currentBuffer===null){
+		if (currentBuffer === null) {
 			return false;
 		}
-		const nextChunk=currentChunk.next;
-		if(nextChunk===null){
+		const nextChunk = currentChunk.next;
+		if (nextChunk === null) {
 			return true;
 		}
-		if(!nextChunk.ready){
+		if (!nextChunk.ready) {
 			return false;
 		}
-		if(nextBuffer===null){
+		if (nextBuffer === null) {
 			return false;
 		}
 		return true;
+	}
+
+	// Start play the audioBuffer when the audioBufferCacheHit is true
+	private startPlay() {
+		this._actualPlaying = true
+		const {
+			currentChuckStartTime,
+			currentChunk,
+			currentBuffer,
+			nextBuffer,
+		} = this._audioBufferCache!
+
+		this._contextTimeAtStart = this.context.currentTime
+		if (currentChunk !== null) {
+			const nextStart = this._contextTimeAtStart + (currentChunk.duration! - currentChuckStartTime);
+
+			this._currentSource = this.context.createBufferSource();
+			this._currentSource.buffer = currentBuffer!;
+			this._currentGain = this.context.createGain();
+			this._currentGain.connect(this._gain);
+			this._currentGain.gain.setValueAtTime(0, nextStart + OVERLAP);
+			this._currentSource.connect(this._currentGain);
+			this._currentSource.start(this._contextTimeAtStart, currentChuckStartTime);
+			// TODO: setup onend
+			if (currentChunk.next !== null) {
+				this._nextSource = this.context.createBufferSource();
+				this._nextSource.buffer = nextBuffer!;
+				this._nextGain = this.context.createGain();
+				this._nextGain.connect(this._gain);
+				this._nextGain.gain.setValueAtTime(0, nextStart);
+				this._nextGain.gain.setValueAtTime(1, nextStart + OVERLAP);
+				this._nextSource.connect(this._nextGain);
+				this._nextSource.start(this._contextTimeAtStart, currentChuckStartTime);
+				const pendingStart = nextStart + currentChunk.next!.duration!;
+				this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
+			}
+		} else {
+			this.pause()._currentTime = 0;
+			this.ended = true;
+			this._fire('ended');
+		}
 	}
 }
