@@ -77,6 +77,7 @@ export default class Clip<Metadata> {
 		this.__chunks = value;
 	}
 	private _contextTimeAtStart: number = 0;
+	private _nextStart: number = 0;
 	private _connected: boolean = false;
 	private _volume: number;
 	private _gain: GainNode<AudioContext>;
@@ -669,6 +670,25 @@ export default class Clip<Metadata> {
 		return true;
 	}
 
+	// Advance the audioBufferCache to next chunk when current chuck is played
+	private advanceAudioBufferCache() {
+		const {
+			currentChunk,
+			currentChuckStartTime,
+			currentBuffer,
+			nextBuffer,
+			pendingBuffer,
+		} = this._audioBufferCache!
+		this._audioBufferCache = {
+			currentChuckStartTime: currentChuckStartTime + currentChunk!.duration!,
+			currentChunk: currentChunk!.next!,
+			currentBuffer: nextBuffer,
+			nextBuffer: pendingBuffer,
+			pendingBuffer: null,
+		}
+		// TODO: setup pending buffer load
+	}
+
 	// Start play the audioBuffer when the audioBufferCacheHit is true
 	private startPlay() {
 		this._actualPlaying = true
@@ -681,13 +701,13 @@ export default class Clip<Metadata> {
 
 		this._contextTimeAtStart = this.context.currentTime
 		if (currentChunk !== null) {
-			const nextStart = this._contextTimeAtStart + (currentChunk.duration! - currentChuckStartTime);
+			this._nextStart = this._contextTimeAtStart + (currentChunk.duration! - currentChuckStartTime);
 
 			this._currentSource = this.context.createBufferSource();
 			this._currentSource.buffer = currentBuffer!;
 			this._currentGain = this.context.createGain();
 			this._currentGain.connect(this._gain);
-			this._currentGain.gain.setValueAtTime(0, nextStart + OVERLAP);
+			this._currentGain.gain.setValueAtTime(0, this._nextStart + OVERLAP);
 			this._currentSource.connect(this._currentGain);
 			this._currentSource.start(this._contextTimeAtStart, currentChuckStartTime);
 			// TODO: setup onend
@@ -696,17 +716,49 @@ export default class Clip<Metadata> {
 				this._nextSource.buffer = nextBuffer!;
 				this._nextGain = this.context.createGain();
 				this._nextGain.connect(this._gain);
-				this._nextGain.gain.setValueAtTime(0, nextStart);
-				this._nextGain.gain.setValueAtTime(1, nextStart + OVERLAP);
+				this._nextGain.gain.setValueAtTime(0, this._nextStart);
+				this._nextGain.gain.setValueAtTime(1, this._nextStart + OVERLAP);
 				this._nextSource.connect(this._nextGain);
 				this._nextSource.start(this._contextTimeAtStart, currentChuckStartTime);
-				const pendingStart = nextStart + currentChunk.next!.duration!;
+				const pendingStart = this._nextStart + currentChunk.next!.duration!;
 				this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
+				this._nextStart = pendingStart;
 			}
 		} else {
 			this.pause()._currentTime = 0;
 			this.ended = true;
 			this._fire('ended');
+		}
+	}
+
+	// Advance audio nodes to next chunk when current chuck is played
+	// and the audioBufferCacheHit is true
+	// should be called after advanceAudioBufferCache
+	private advanceAudioNodes() {
+		this._currentSource?.stop();
+		this._currentSource?.disconnect();
+		this._currentGain?.disconnect();
+		this._currentGain = this._nextGain;
+		this._currentSource = this._nextSource;
+		const {
+			currentChuckStartTime,
+			currentChunk,
+			nextBuffer,
+		} = this._audioBufferCache!
+		if (currentChunk?.next !== null) {
+			this._nextSource = this.context.createBufferSource();
+			this._nextSource.buffer = nextBuffer!;
+			this._nextGain = this.context.createGain();
+			this._nextGain.connect(this._gain);
+			this._nextGain.gain.setValueAtTime(0, this._nextStart);
+			this._nextGain.gain.setValueAtTime(1, this._nextStart + OVERLAP);
+			this._nextSource.connect(this._nextGain);
+			this._nextSource.start(this._contextTimeAtStart, currentChuckStartTime);
+			const pendingStart = this._nextStart + currentChunk?.next!.duration!;
+			this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
+		} else {
+			this._nextGain = null;
+			this._nextSource = null;
 		}
 	}
 }
