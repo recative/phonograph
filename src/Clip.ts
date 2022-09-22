@@ -1,6 +1,7 @@
 import {
 	AudioContext,
 	GainNode,
+	IAudioBuffer,
 	IAudioBufferSourceNode,
 	IAudioNode
 } from 'standardized-audio-context';
@@ -25,6 +26,14 @@ class PhonographError extends Error {
 		this.phonographCode = opts.phonographCode;
 		this.url = opts.url;
 	}
+}
+
+// A cache of audio buffers starting from current time
+interface AudioBufferCache<Metadata> {
+	currentChunk: Chunk<Metadata> | null
+	currentBuffer: IAudioBuffer | null
+	nextBuffer: IAudioBuffer | null
+	pendingBuffer: IAudioBuffer | null
 }
 
 export default class Clip<Metadata> {
@@ -71,8 +80,12 @@ export default class Clip<Metadata> {
 	private _gain: GainNode<AudioContext>;
 	private _loadStarted: boolean = false;
 	private _actualPlaying = false;
+	public get stuck() {
+		return this.playing && !this._actualPlaying
+	}
 	private _currentSource: IAudioBufferSourceNode<AudioContext> | null = null
 	private _nextSource: IAudioBufferSourceNode<AudioContext> | null = null
+	private _audioBufferCache: AudioBufferCache<Metadata> | null = null
 
 	constructor({
 		context,
@@ -157,7 +170,12 @@ export default class Clip<Metadata> {
 				const chunk = new Chunk<Metadata>({
 					clip: this,
 					raw: slice(tempBuffer, firstByte, p),
-					onready: this.canplaythrough ? null : checkCanplaythrough,
+					onready: () => {
+						if (!this.canplaythrough) {
+							checkCanplaythrough();
+						}
+						this.trySetupAudioBufferCache();
+					},
 					onerror: (error: any) => {
 						error.url = this.url;
 						error.phonographCode = 'COULD_NOT_DECODE';
@@ -225,7 +243,7 @@ export default class Clip<Metadata> {
 						totalLoadedBytes += p;
 					}
 
-					this._chunks[0].once("ready",() => {
+					this._chunks[0].once("ready", () => {
 						if (!this.canplaythrough) {
 							this.canplaythrough = true;
 							this._fire('canplaythrough');
@@ -387,9 +405,13 @@ export default class Clip<Metadata> {
 		if (this.playing) {
 			this.pause();
 			this._currentTime = currentTime;
+			this._audioBufferCache = null;
+			this.trySetupAudioBufferCache();
 			this.play();
 		} else {
 			this._currentTime = currentTime;
+			this._audioBufferCache = null;
+			this.trySetupAudioBufferCache();
 		}
 	}
 
@@ -567,5 +589,77 @@ export default class Clip<Metadata> {
 				this._fire('playbackerror', error);
 			}
 		);
+	}
+
+	// Attempt to setup AudioBufferCache if it is not setup
+	// Should be called when new chunk is ready
+	private trySetupAudioBufferCache() {
+		if (this._audioBufferCache !== null) {
+			return
+		}
+		let lastChunk: Chunk<Metadata> | null = null;
+		let chunk: Chunk<Metadata> | null = this._chunks[0] ?? null;
+		let time = 0;
+		while (chunk !== null) {
+			if (chunk.duration === null) {
+				return
+			}
+			const chunkEnd = time + chunk.duration;
+			if (chunkEnd > this._currentTime) {
+				this._audioBufferCache = {
+					currentChunk: chunk,
+					currentBuffer: null,
+					nextBuffer: null,
+					pendingBuffer: null,
+				}
+				// TODO: start buffer load here
+				return
+			};
+			time = chunkEnd;
+			lastChunk = chunk;
+			chunk = lastChunk.next;
+		}
+		// All available Chunk visited, check if there are more chunks to be load.
+		if(lastChunk?.ready){
+			this._audioBufferCache = {
+				currentChunk: null,
+				currentBuffer: null,
+				nextBuffer: null,
+				pendingBuffer: null,
+			}
+		}
+	}
+
+	// Check is there enough audio buffer to schedule current and next chunk
+	private audioBufferCacheHit() {
+		const audioBufferCache=this._audioBufferCache
+		if(audioBufferCache===null){
+			return false;
+		}
+		const {
+			currentChunk,
+			currentBuffer,
+			nextBuffer,
+		}=audioBufferCache
+		if(currentChunk===null){
+			return true;
+		}
+		if(!currentChunk.ready){
+			return false;
+		}
+		if(currentBuffer===null){
+			return false;
+		}
+		const nextChunk=currentChunk.next;
+		if(nextChunk===null){
+			return true;
+		}
+		if(!nextChunk.ready){
+			return false;
+		}
+		if(nextBuffer===null){
+			return false;
+		}
+		return true;
 	}
 }
