@@ -52,11 +52,11 @@ export default class Clip<Metadata> {
 		this._canplaythrough = value;
 	}
 	loader: Loader;
-	metadata: Metadata;
+	metadata: Metadata | null = null;
 	playing = false;
 	ended = false;
 
-	_startTime: number;
+	_startTime: number = 0;
 	_currentTime = 0;
 	private __chunks: Chunk<Metadata>[] = [];
 	public get _chunks(): Chunk<Metadata>[] {
@@ -65,12 +65,14 @@ export default class Clip<Metadata> {
 	public set _chunks(value: Chunk<Metadata>[]) {
 		this.__chunks = value;
 	}
-	_contextTimeAtStart: number;
-	_connected: boolean;
+	_contextTimeAtStart: number = 0;
+	_connected: boolean = false;
 	_volume: number;
 	_gain: GainNode<AudioContext>;
-	_loadStarted: boolean;
+	_loadStarted: boolean = false;
 	_actualPlaying = false;
+	_currentSource: IAudioBufferSourceNode<AudioContext> | null = null
+	_nextSource: IAudioBufferSourceNode<AudioContext> | null = null
 
 	constructor({
 		context,
@@ -90,7 +92,7 @@ export default class Clip<Metadata> {
 		this.loop = loop || false;
 		this.adapter = adapter;
 
-		this.loader = new (window.fetch ? FetchLoader : XhrLoader)(url);
+		this.loader = new ((window as any).fetch ? FetchLoader : XhrLoader)(url);
 
 		this._volume = volume || 1;
 		this._gain = this.context.createGain();
@@ -202,7 +204,7 @@ export default class Clip<Metadata> {
 							p + processedBytes >= nextFrameStartBytes && this.adapter.validateChunk(uint8Array, i)
 						) {
 							const metadata = this.adapter.getChunkMetadata(uint8Array, i);
-							nextFrameStartBytes = p + processedBytes + this.adapter.getChunkLength(uint8Array, metadata, i)
+							nextFrameStartBytes = p + processedBytes + (this.adapter.getChunkLength(uint8Array, metadata, i) ?? 0)
 							if (p > CHUNK_SIZE + 4) {
 								drainBuffer();
 							}
@@ -247,7 +249,7 @@ export default class Clip<Metadata> {
 			const ready = bufferToCompletion ? this.loaded : this.canplaythrough;
 
 			if (ready) {
-				fulfil(null);
+				fulfil();
 			} else {
 				this.once(bufferToCompletion ? 'load' : 'canplaythrough', fulfil);
 				this.once('loaderror', reject);
@@ -449,29 +451,34 @@ export default class Clip<Metadata> {
 		const pauseListener = this.on('pause', () => {
 			playing = false;
 
-			if (previousSource) previousSource.stop();
-			if (currentSource) currentSource.stop();
+			if (this._currentSource) {
+				this._currentSource.stop()
+				this._currentSource.disconnect()
+				this._currentSource = null;
+			};
+			if (this._nextSource) {
+				this._nextSource.disconnect()
+				this._nextSource = null;
+			};
 			pauseListener.cancel();
 		});
 
 		const i = chunkIndex++ % this._chunks.length;
 
 		let chunk = this._chunks[i];
-		let previousSource: IAudioBufferSourceNode<AudioContext>;
-		let currentSource: IAudioBufferSourceNode<AudioContext>;
 
 		chunk.createBuffer(
 			decoded => {
 				const source = this.context.createBufferSource();
 				source.buffer = decoded;
 
-				currentSource = source;
+				this._nextSource = source;
 
 				this._contextTimeAtStart = this.context.currentTime;
 
 				let lastStart = this._contextTimeAtStart;
 				let nextStart =
-					this._contextTimeAtStart + (chunk.duration - timeOffset);
+					this._contextTimeAtStart + (chunk.duration! - timeOffset);
 
 				const gain = this.context.createGain();
 				gain.connect(this._gain);
@@ -504,8 +511,11 @@ export default class Clip<Metadata> {
 							decoded => {
 								const source = this.context.createBufferSource();
 								source.buffer = decoded;
-								previousSource = currentSource;
-								currentSource = source;
+
+								this._currentSource?.stop();
+								this._currentSource?.disconnect();
+								this._currentSource = this._nextSource;
+								this._nextSource = source;
 
 								const gain = this.context.createGain();
 								gain.connect(this._gain);
@@ -516,7 +526,7 @@ export default class Clip<Metadata> {
 								source.start(nextStart);
 
 								lastStart = nextStart;
-								nextStart += chunk.duration;
+								nextStart += chunk.duration!;
 
 								gain.gain.setValueAtTime(0, nextStart + OVERLAP);
 

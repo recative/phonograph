@@ -48,7 +48,7 @@ export class FetchLoader implements Loader {
 					return;
 				}
 
-				const total = +response.headers.get('content-length') || 0;
+				const total = +(response.headers.get('content-length') ?? 0) || 0;
 
 				let length = 0;
 				onprogress((total ? length : 0) / total, length, total);
@@ -102,7 +102,7 @@ export class FetchLoader implements Loader {
 export class XhrLoader implements Loader {
 	url: string;
 	_cancelled: boolean;
-	_xhr: XMLHttpRequest;
+	_xhr: XMLHttpRequest | null;
 
 	constructor(url: string) {
 		this.url = url;

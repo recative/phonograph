@@ -5,19 +5,19 @@ import { IAdapter } from './adapters/IAdapter';
 
 import Clip from './Clip';
 
-export default class Chunk <Metadata>{
+export default class Chunk<Metadata>{
 	clip: Clip<Metadata>;
 	context: AudioContext;
-	duration: number;
-	numFrames: number=0;
+	duration: number | null = null;
+	numFrames: number | null = null;
 	raw: Uint8Array;
-	extended: Uint8Array;
+	extended: Uint8Array | null;
 	ready: boolean;
-	next: Chunk<Metadata>;
+	next: Chunk<Metadata> | null = null;
 	readonly adapter: IAdapter<Metadata>;
 
 	_attached: boolean;
-	_callback: () => void;
+	_callback: (() => void) | null = null;
 	_firstByte: number;
 
 	constructor({
@@ -29,7 +29,7 @@ export default class Chunk <Metadata>{
 	}: {
 		clip: Clip<Metadata>;
 		raw: Uint8Array;
-		onready: () => void;
+		onready: (() => void) | null;
 		onerror: (error: Error) => void;
 		adapter: IAdapter<Metadata>
 	}) {
@@ -80,9 +80,9 @@ export default class Chunk <Metadata>{
 					numFrames += 1;
 
 					const frameLength = this.adapter.getChunkLength(this.raw, metadata, i);
-					i += Math.max(frameLength,4);
-					duration += this.adapter.getChunkDuration(this.raw, metadata, i);
-				}else{
+					i += Math.max(frameLength ?? 0, 4);
+					duration += this.adapter.getChunkDuration(this.raw, metadata, i) ?? 0;
+				} else {
 					i += 1
 				}
 			}
@@ -93,7 +93,7 @@ export default class Chunk <Metadata>{
 		}, onerror);
 	}
 
-	attach(nextChunk: Chunk<Metadata>) {
+	attach(nextChunk: Chunk<Metadata> | null) {
 		this.next = nextChunk;
 		this._attached = true;
 
@@ -108,7 +108,7 @@ export default class Chunk <Metadata>{
 		}
 
 		this.context.decodeAudioData(
-			slice(this.extended, 0, this.extended.length).buffer,
+			slice(this.extended!, 0, this.extended!.length).buffer,
 			decoded => {
 				callback(decoded);
 			},

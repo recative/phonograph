@@ -5,12 +5,12 @@ export interface IAdapter<Metadata> {
   ) => boolean,
   getChunkLength: (
     rawData: Uint8Array,
-    metadata: Metadata,
+    metadata: Metadata | null,
     index?: number
   ) => number | null;
   getChunkDuration: (
     rawData: Uint8Array,
-    metadata: Metadata,
+    metadata: Metadata | null,
     index?: number
   ) => number | null;
   getChunkMetadata: (
