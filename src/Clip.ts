@@ -469,7 +469,8 @@ export default class Clip<Metadata> {
 					nextBuffer: null,
 					pendingBuffer: null,
 				}
-				console.log("SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
+				// console.trace("SetupAudioBufferCache")
+				// console.log("SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
 				this.decodeChunk(chunk ?? null)
 				this.decodeChunk(chunk?.next ?? null)
 				this.decodeChunk(chunk?.next?.next ?? null)
@@ -488,7 +489,7 @@ export default class Clip<Metadata> {
 				nextBuffer: null,
 				pendingBuffer: null,
 			}
-			console.log("SetupAudioBufferCache: -1")
+			// console.log("SetupAudioBufferCache: -1")
 		}
 	}
 
@@ -540,7 +541,7 @@ export default class Clip<Metadata> {
 			nextBuffer: pendingBuffer,
 			pendingBuffer: null,
 		}
-		console.log("SetupAudioBufferCache: ", this._chunks.indexOf(currentChunk!.next!))
+		// console.log("SetupAudioBufferCache: ", this._chunks.indexOf(currentChunk!.next!))
 		this.decodeChunk(currentChunk?.next?.next?.next ?? null)
 	}
 
@@ -548,7 +549,7 @@ export default class Clip<Metadata> {
 	private startPlay() {
 		this._startTime = this._currentTime
 		this._actualPlaying = true
-		console.log(`Start play from: ${this._startTime}`)
+		// console.log(`Start play from: ${this._startTime}`)
 		const {
 			currentChunkStartTime,
 			currentChunk,
@@ -557,10 +558,15 @@ export default class Clip<Metadata> {
 		} = this._audioBufferCache!
 
 		this._contextTimeAtStart = this.context.currentTime
-		console.log(`_contextTimeAtStart: ${this._contextTimeAtStart}`)
+		// console.log(`_contextTimeAtStart: ${this._contextTimeAtStart}`)
 		if (currentChunk !== null) {
-			this._pendingSourceStart = this._contextTimeAtStart + (currentChunk.duration! - currentChunkStartTime);
+			this._pendingSourceStart = this._contextTimeAtStart + (currentChunk.duration! - (this._startTime - currentChunkStartTime));
 
+			// console.log("=====")
+			// console.log(`play chunk: ${this._chunks.indexOf(currentChunk)}`)
+			// console.log(`offset: ${this._startTime - currentChunkStartTime}`)
+			// console.log(`from: ${this._contextTimeAtStart}`)
+			// console.log(`to: ${this._pendingSourceStart}`)
 			this._currentSource = this.context.createBufferSource();
 			this._currentSource.buffer = currentBuffer!;
 			this._currentGain = this.context.createGain();
@@ -570,10 +576,12 @@ export default class Clip<Metadata> {
 			this._currentSource.start(this._contextTimeAtStart, this._startTime - currentChunkStartTime);
 			this._currentSource.stop(this._pendingSourceStart + OVERLAP * 2)
 			this._currentSource.addEventListener("ended", this.onCurrentSourceEnd)
-			console.log(`play chunk: ${this._chunks.indexOf(currentChunk)}`)
-			console.log(`offset: ${this._startTime - currentChunkStartTime}`)
-			console.log(`from: ${this._contextTimeAtStart}`)
 			if (currentChunk.next !== null) {
+				const pendingStart = this._pendingSourceStart + currentChunk.next!.duration!;
+				// console.log("=====")
+				// console.log(`play chunk: ${this._chunks.indexOf(currentChunk.next)}`)
+				// console.log(`from: ${this._pendingSourceStart}`)
+				// console.log(`to: ${pendingStart}`)
 				this._nextSource = this.context.createBufferSource();
 				this._nextSource.buffer = nextBuffer!;
 				this._nextGain = this.context.createGain();
@@ -581,16 +589,13 @@ export default class Clip<Metadata> {
 				this._nextGain.gain.setValueAtTime(0, this._pendingSourceStart);
 				this._nextGain.gain.setValueAtTime(1, this._pendingSourceStart + OVERLAP);
 				this._nextSource.connect(this._nextGain);
-				this._nextSource.start(this._pendingSourceStart, currentChunkStartTime);
-				const pendingStart = this._pendingSourceStart + currentChunk.next!.duration!;
+				this._nextSource.start(this._pendingSourceStart);
 				this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
 				this._nextSource.stop(pendingStart + OVERLAP * 2)
 				this._pendingSourceStart = pendingStart;
-				console.log(`play chunk: ${this._chunks.indexOf(currentChunk.next)}`)
-				console.log(`from: ${this._pendingSourceStart}`)
 			}
 		} else {
-			this.pause()._currentTime = 0;
+			this.pause().currentTime = 0;
 			this.ended = true;
 			this._fire('ended');
 		}
@@ -607,11 +612,15 @@ export default class Clip<Metadata> {
 		this._currentSource = this._nextSource;
 		this._currentSource?.addEventListener("ended", this.onCurrentSourceEnd)
 		const {
-			currentChunkStartTime,
 			currentChunk,
 			nextBuffer,
 		} = this._audioBufferCache!
-		if (currentChunk?.next !== null) {
+		if ((currentChunk?.next ?? null) !== null) {
+			const pendingStart = this._pendingSourceStart + currentChunk?.next!.duration!;
+			// console.log("=====")
+			// console.log(`play chunk: ${this._chunks.indexOf(currentChunk!.next!)}`)
+			// console.log(`from: ${this._pendingSourceStart}`)
+			// console.log(`to: ${pendingStart}`)
 			this._nextSource = this.context.createBufferSource();
 			this._nextSource.buffer = nextBuffer!;
 			this._nextGain = this.context.createGain();
@@ -619,19 +628,16 @@ export default class Clip<Metadata> {
 			this._nextGain.gain.setValueAtTime(0, this._pendingSourceStart);
 			this._nextGain.gain.setValueAtTime(1, this._pendingSourceStart + OVERLAP);
 			this._nextSource.connect(this._nextGain);
-			this._nextSource.start(this._pendingSourceStart, currentChunkStartTime);
-			const pendingStart = this._pendingSourceStart + currentChunk?.next!.duration!;
+			this._nextSource.start(this._pendingSourceStart);
 			this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
 			this._nextSource.stop(pendingStart + OVERLAP * 2)
 			this._pendingSourceStart = pendingStart;
-			console.log(`play chunk: ${this._chunks.indexOf(currentChunk!.next)}`)
-			console.log(`from: ${this._pendingSourceStart}`)
 		} else {
 			this._nextGain = null;
 			this._nextSource = null;
 		}
 		if (currentChunk === null) {
-			this.pause()._currentTime = 0;
+			this.pause().currentTime = 0;
 			this.ended = true;
 			this._fire('ended');
 		}
@@ -659,10 +665,13 @@ export default class Clip<Metadata> {
 		};
 		this._currentTime =
 			this._startTime + (this.context.currentTime - this._contextTimeAtStart);
+		this._audioBufferCache=null;
+		this.trySetupAudioBufferCache();
 	}
 
 	// Advance to next Chunk if playback of current source ends
 	private onCurrentSourceEnd = () => {
+		// console.log("CurrentSourceEnd")
 		if (!this.playing || !this._actualPlaying) {
 			return
 		}
@@ -671,14 +680,14 @@ export default class Clip<Metadata> {
 			this.advanceAudioNodes();
 		} else {
 			this._actualPlaying = false;
-			console.log("AudioBufferCacheHit = false when advance")
+			// console.log("AudioBufferCacheHit = false when advance")
 			this.resetAudioNodes();
 		}
 	}
 
 	// Put audio buffer into AudioBufferCache when it is decoded
 	private onBufferDecoded(chunk: Chunk<Metadata>, buffer: IAudioBuffer) {
-		console.log("onBufferDecoded: ",this._chunks.indexOf(chunk))
+		// console.log("onBufferDecoded: ",this._chunks.indexOf(chunk))
 		const audioBufferCache = this._audioBufferCache
 		if (audioBufferCache === null) {
 			return;
