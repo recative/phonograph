@@ -344,9 +344,9 @@ export default class Clip<Metadata> {
 			warn(
 				`clip.play() was called before clip.canplaythrough === true (${this.url})`
 			);
-			this.buffer().then(() => this._play());
+			this.buffer().then(() => this._setupPlayback());
 		} else {
-			this._play();
+			this._setupPlayback();
 		}
 
 		this.playing = true;
@@ -422,7 +422,7 @@ export default class Clip<Metadata> {
 		callbacks.slice().forEach(cb => cb(data));
 	}
 
-	_play() {
+	_setupPlayback() {
 		let chunkIndex: number;
 		let time = 0;
 		for (chunkIndex = 0; chunkIndex < this._chunks.length; chunkIndex += 1) {
@@ -431,7 +431,7 @@ export default class Clip<Metadata> {
 			if (!chunk.duration) {
 				warn(`attempted to play content that has not yet buffered ${this.url}`);
 				setTimeout(() => {
-					this._play();
+					this._setupPlayback();
 				}, 100);
 				return;
 			}
@@ -467,7 +467,7 @@ export default class Clip<Metadata> {
 
 		let chunk = this._chunks[i];
 
-		chunk.createBuffer(
+		chunk.createBufferCallback(
 			decoded => {
 				const source = this.context.createBufferSource();
 				source.buffer = decoded;
@@ -507,7 +507,7 @@ export default class Clip<Metadata> {
 					chunk = this._chunks[i];
 
 					if (chunk) {
-						chunk.createBuffer(
+						chunk.createBufferCallback(
 							decoded => {
 								const source = this.context.createBufferSource();
 								source.buffer = decoded;

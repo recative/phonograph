@@ -100,20 +100,17 @@ export default class Chunk<Metadata>{
 		this._ready();
 	}
 
-	createBuffer(callback: (source: IAudioBuffer) => void, errback: (error: Error) => void) {
+	createBufferCallback(callback: (buffer: IAudioBuffer) => void, errback: (error: Error) => void) {
+		this.createBuffer().then(callback,errback)
+	}
+
+	createBuffer():Promise<IAudioBuffer>{
 		if (!this.ready) {
 			throw new Error(
 				'Something went wrong! Chunk was not ready in time for playback'
 			);
 		}
-
-		this.context.decodeAudioData(
-			slice(this.extended!, 0, this.extended!.length).buffer,
-			decoded => {
-				callback(decoded);
-			},
-			errback
-		);
+		return this.context.decodeAudioData(slice(this.extended!, 0, this.extended!.length).buffer);
 	}
 
 	onready(callback: () => void) {
