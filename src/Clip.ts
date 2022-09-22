@@ -31,7 +31,7 @@ class PhonographError extends Error {
 
 // A cache of audio buffers starting from current time
 interface AudioBufferCache<Metadata> {
-	currentChuckStartTime: number;
+	currentChunkStartTime: number;
 	currentChunk: Chunk<Metadata> | null
 	currentBuffer: IAudioBuffer | null
 	nextBuffer: IAudioBuffer | null
@@ -77,7 +77,7 @@ export default class Clip<Metadata> {
 		this.__chunks = value;
 	}
 	private _contextTimeAtStart: number = 0;
-	private _nextStart: number = 0;
+	private _pendingSourceStart: number = 0;
 	private _connected: boolean = false;
 	private _volume: number;
 	private _gain: GainNode<AudioContext>;
@@ -367,13 +367,11 @@ export default class Clip<Metadata> {
 			warn(
 				`clip.play() was called before clip.canplaythrough === true (${this.url})`
 			);
-			this.buffer().then(() => this._setupPlayback());
-		} else {
-			this._setupPlayback();
+			this.buffer();
 		}
-
 		this.playing = true;
 		this.ended = false;
+		this.tryResumePlayback()
 
 		return promise;
 	}
@@ -388,9 +386,8 @@ export default class Clip<Metadata> {
 
 		this.playing = false;
 		this._actualPlaying = false;
-		this._currentTime =
-			this._startTime + (this.context.currentTime - this._contextTimeAtStart);
 
+		this.resetAudioNodes();
 		this._fire('pause');
 
 		return this;
@@ -412,6 +409,7 @@ export default class Clip<Metadata> {
 			this._currentTime = currentTime;
 			this._audioBufferCache = null;
 			this.trySetupAudioBufferCache();
+			this.tryResumePlayback()
 			this.play();
 		} else {
 			this._currentTime = currentTime;
@@ -449,153 +447,6 @@ export default class Clip<Metadata> {
 		callbacks.slice().forEach(cb => cb(data));
 	}
 
-	private _setupPlayback() {
-		let chunkIndex: number;
-		let time = 0;
-		for (chunkIndex = 0; chunkIndex < this._chunks.length; chunkIndex += 1) {
-			const chunk = this._chunks[chunkIndex];
-
-			if (!chunk.duration) {
-				warn(`attempted to play content that has not yet buffered ${this.url}`);
-				setTimeout(() => {
-					this._setupPlayback();
-				}, 100);
-				return;
-			}
-
-			const chunkEnd = time + chunk.duration;
-			if (chunkEnd > this._currentTime) break;
-
-			time = chunkEnd;
-		}
-
-		this._startTime = this._currentTime;
-		const timeOffset = this._currentTime - time;
-
-		this._fire('play');
-
-		let playing = true;
-		const pauseListener = this.on('pause', () => {
-			playing = false;
-
-			if (this._currentSource) {
-				this._currentSource.stop()
-				this._currentSource.disconnect()
-				this._currentSource = null;
-			};
-			if (this._nextSource) {
-				this._nextSource.disconnect()
-				this._nextSource = null;
-			};
-			pauseListener.cancel();
-		});
-
-		const i = chunkIndex++ % this._chunks.length;
-
-		let chunk = this._chunks[i];
-
-		chunk.createBufferCallback(
-			decoded => {
-				const source = this.context.createBufferSource();
-				source.buffer = decoded;
-
-				this._nextSource = source;
-
-				this._contextTimeAtStart = this.context.currentTime;
-
-				let lastStart = this._contextTimeAtStart;
-				let nextStart =
-					this._contextTimeAtStart + (chunk.duration! - timeOffset);
-
-				const gain = this.context.createGain();
-				gain.connect(this._gain);
-				gain.gain.setValueAtTime(0, nextStart + OVERLAP);
-
-				source.connect(gain);
-				source.start(this.context.currentTime, timeOffset);
-				this._actualPlaying = true;
-
-				const endGame = () => {
-					if (this.context.currentTime >= nextStart) {
-						this.pause()._currentTime = 0;
-						this.ended = true;
-						this._fire('ended');
-					} else {
-						requestAnimationFrame(endGame);
-					}
-				};
-
-				const advance = () => {
-					if (!playing) return;
-
-					let i = chunkIndex++;
-					if (this.loop) i %= this._chunks.length;
-
-					chunk = this._chunks[i];
-
-					if (chunk) {
-						chunk.createBufferCallback(
-							decoded => {
-								const source = this.context.createBufferSource();
-								source.buffer = decoded;
-
-								this._currentSource?.stop();
-								this._currentSource?.disconnect();
-								this._currentSource = this._nextSource;
-								this._nextSource = source;
-
-								const gain = this.context.createGain();
-								gain.connect(this._gain);
-								gain.gain.setValueAtTime(0, nextStart);
-								gain.gain.setValueAtTime(1, nextStart + OVERLAP);
-
-								source.connect(gain);
-								source.start(nextStart);
-
-								lastStart = nextStart;
-								nextStart += chunk.duration!;
-
-								gain.gain.setValueAtTime(0, nextStart + OVERLAP);
-
-								tick();
-							},
-							(error: any) => {
-								error.url = this.url;
-								error.phonographCode = 'COULD_NOT_CREATE_SOURCE';
-								this._fire('playbackerror', error);
-							}
-						);
-					} else {
-						endGame();
-					}
-				};
-
-				const tick = () => {
-					if (this.context.currentTime > lastStart) {
-						advance();
-					} else {
-						setTimeout(tick, 500);
-					}
-				};
-
-				const frame = () => {
-					if (!playing) return;
-					requestAnimationFrame(frame);
-
-					this._fire('progress');
-				};
-
-				tick();
-				frame();
-			},
-			(error: any) => {
-				error.url = this.url;
-				error.phonographCode = 'COULD_NOT_START_PLAYBACK';
-				this._fire('playbackerror', error);
-			}
-		);
-	}
-
 	// Attempt to setup AudioBufferCache if it is not setup
 	// Should be called when new chunk is ready
 	private trySetupAudioBufferCache() {
@@ -612,13 +463,16 @@ export default class Clip<Metadata> {
 			const chunkEnd = time + chunk.duration;
 			if (chunkEnd > this._currentTime) {
 				this._audioBufferCache = {
-					currentChuckStartTime: time,
+					currentChunkStartTime: time,
 					currentChunk: chunk,
 					currentBuffer: null,
 					nextBuffer: null,
 					pendingBuffer: null,
 				}
-				// TODO: start buffer load here
+				console.log("SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
+				this.decodeChunk(chunk ?? null)
+				this.decodeChunk(chunk?.next ?? null)
+				this.decodeChunk(chunk?.next?.next ?? null)
 				return
 			};
 			time = chunkEnd;
@@ -628,12 +482,13 @@ export default class Clip<Metadata> {
 		// All available Chunk visited, check if there are more chunks to be load.
 		if (lastChunk?.ready) {
 			this._audioBufferCache = {
-				currentChuckStartTime: time,
+				currentChunkStartTime: time,
 				currentChunk: null,
 				currentBuffer: null,
 				nextBuffer: null,
 				pendingBuffer: null,
 			}
+			console.log("SetupAudioBufferCache: -1")
 		}
 	}
 
@@ -670,58 +525,69 @@ export default class Clip<Metadata> {
 		return true;
 	}
 
-	// Advance the audioBufferCache to next chunk when current chuck is played
+	// Advance the audioBufferCache to next chunk when current chunk is played
 	private advanceAudioBufferCache() {
 		const {
 			currentChunk,
-			currentChuckStartTime,
+			currentChunkStartTime,
 			nextBuffer,
 			pendingBuffer,
 		} = this._audioBufferCache!
 		this._audioBufferCache = {
-			currentChuckStartTime: currentChuckStartTime + currentChunk!.duration!,
+			currentChunkStartTime: currentChunkStartTime + currentChunk!.duration!,
 			currentChunk: currentChunk!.next!,
 			currentBuffer: nextBuffer,
 			nextBuffer: pendingBuffer,
 			pendingBuffer: null,
 		}
-		// TODO: setup pending buffer load
+		console.log("SetupAudioBufferCache: ", this._chunks.indexOf(currentChunk!.next!))
+		this.decodeChunk(currentChunk?.next?.next?.next ?? null)
 	}
 
 	// Start play the audioBuffer when the audioBufferCacheHit is true
 	private startPlay() {
+		this._startTime = this._currentTime
 		this._actualPlaying = true
+		console.log(`Start play from: ${this._startTime}`)
 		const {
-			currentChuckStartTime,
+			currentChunkStartTime,
 			currentChunk,
 			currentBuffer,
 			nextBuffer,
 		} = this._audioBufferCache!
 
 		this._contextTimeAtStart = this.context.currentTime
+		console.log(`_contextTimeAtStart: ${this._contextTimeAtStart}`)
 		if (currentChunk !== null) {
-			this._nextStart = this._contextTimeAtStart + (currentChunk.duration! - currentChuckStartTime);
+			this._pendingSourceStart = this._contextTimeAtStart + (currentChunk.duration! - currentChunkStartTime);
 
 			this._currentSource = this.context.createBufferSource();
 			this._currentSource.buffer = currentBuffer!;
 			this._currentGain = this.context.createGain();
 			this._currentGain.connect(this._gain);
-			this._currentGain.gain.setValueAtTime(0, this._nextStart + OVERLAP);
+			this._currentGain.gain.setValueAtTime(0, this._pendingSourceStart + OVERLAP);
 			this._currentSource.connect(this._currentGain);
-			this._currentSource.start(this._contextTimeAtStart, currentChuckStartTime);
-			this._currentSource.addEventListener("end",this.onCurrentSourceEnd)
+			this._currentSource.start(this._contextTimeAtStart, this._startTime - currentChunkStartTime);
+			this._currentSource.stop(this._pendingSourceStart + OVERLAP * 2)
+			this._currentSource.addEventListener("ended", this.onCurrentSourceEnd)
+			console.log(`play chunk: ${this._chunks.indexOf(currentChunk)}`)
+			console.log(`offset: ${this._startTime - currentChunkStartTime}`)
+			console.log(`from: ${this._contextTimeAtStart}`)
 			if (currentChunk.next !== null) {
 				this._nextSource = this.context.createBufferSource();
 				this._nextSource.buffer = nextBuffer!;
 				this._nextGain = this.context.createGain();
 				this._nextGain.connect(this._gain);
-				this._nextGain.gain.setValueAtTime(0, this._nextStart);
-				this._nextGain.gain.setValueAtTime(1, this._nextStart + OVERLAP);
+				this._nextGain.gain.setValueAtTime(0, this._pendingSourceStart);
+				this._nextGain.gain.setValueAtTime(1, this._pendingSourceStart + OVERLAP);
 				this._nextSource.connect(this._nextGain);
-				this._nextSource.start(this._contextTimeAtStart, currentChuckStartTime);
-				const pendingStart = this._nextStart + currentChunk.next!.duration!;
+				this._nextSource.start(this._pendingSourceStart, currentChunkStartTime);
+				const pendingStart = this._pendingSourceStart + currentChunk.next!.duration!;
 				this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
-				this._nextStart = pendingStart;
+				this._nextSource.stop(pendingStart + OVERLAP * 2)
+				this._pendingSourceStart = pendingStart;
+				console.log(`play chunk: ${this._chunks.indexOf(currentChunk.next)}`)
+				console.log(`from: ${this._pendingSourceStart}`)
 			}
 		} else {
 			this.pause()._currentTime = 0;
@@ -730,7 +596,7 @@ export default class Clip<Metadata> {
 		}
 	}
 
-	// Advance audio nodes to next chunk when current chuck is played
+	// Advance audio nodes to next chunk when current chunk is played
 	// and the audioBufferCacheHit is true
 	// should be called after advanceAudioBufferCache
 	private advanceAudioNodes() {
@@ -739,9 +605,9 @@ export default class Clip<Metadata> {
 		this._currentGain?.disconnect();
 		this._currentGain = this._nextGain;
 		this._currentSource = this._nextSource;
-		this._currentSource?.addEventListener("end",this.onCurrentSourceEnd)
+		this._currentSource?.addEventListener("ended", this.onCurrentSourceEnd)
 		const {
-			currentChuckStartTime,
+			currentChunkStartTime,
 			currentChunk,
 			nextBuffer,
 		} = this._audioBufferCache!
@@ -750,17 +616,21 @@ export default class Clip<Metadata> {
 			this._nextSource.buffer = nextBuffer!;
 			this._nextGain = this.context.createGain();
 			this._nextGain.connect(this._gain);
-			this._nextGain.gain.setValueAtTime(0, this._nextStart);
-			this._nextGain.gain.setValueAtTime(1, this._nextStart + OVERLAP);
+			this._nextGain.gain.setValueAtTime(0, this._pendingSourceStart);
+			this._nextGain.gain.setValueAtTime(1, this._pendingSourceStart + OVERLAP);
 			this._nextSource.connect(this._nextGain);
-			this._nextSource.start(this._contextTimeAtStart, currentChuckStartTime);
-			const pendingStart = this._nextStart + currentChunk?.next!.duration!;
+			this._nextSource.start(this._pendingSourceStart, currentChunkStartTime);
+			const pendingStart = this._pendingSourceStart + currentChunk?.next!.duration!;
 			this._nextGain.gain.setValueAtTime(0, pendingStart + OVERLAP);
+			this._nextSource.stop(pendingStart + OVERLAP * 2)
+			this._pendingSourceStart = pendingStart;
+			console.log(`play chunk: ${this._chunks.indexOf(currentChunk!.next)}`)
+			console.log(`from: ${this._pendingSourceStart}`)
 		} else {
 			this._nextGain = null;
 			this._nextSource = null;
 		}
-		if(currentChunk===null){
+		if (currentChunk === null) {
 			this.pause()._currentTime = 0;
 			this.ended = true;
 			this._fire('ended');
@@ -787,18 +657,78 @@ export default class Clip<Metadata> {
 			this._nextGain.disconnect()
 			this._nextSource = null;
 		};
+		this._currentTime =
+			this._startTime + (this.context.currentTime - this._contextTimeAtStart);
 	}
 
+	// Advance to next Chunk if playback of current source ends
 	private onCurrentSourceEnd = () => {
-		if (!this.playing) {
+		if (!this.playing || !this._actualPlaying) {
 			return
 		}
 		this.advanceAudioBufferCache();
-		if(this.audioBufferCacheHit()){
+		if (this.audioBufferCacheHit()) {
 			this.advanceAudioNodes();
-		}else{
-			this._actualPlaying=false;
+		} else {
+			this._actualPlaying = false;
+			console.log("AudioBufferCacheHit = false when advance")
 			this.resetAudioNodes();
+		}
+	}
+
+	// Put audio buffer into AudioBufferCache when it is decoded
+	private onBufferDecoded(chunk: Chunk<Metadata>, buffer: IAudioBuffer) {
+		console.log("onBufferDecoded: ",this._chunks.indexOf(chunk))
+		const audioBufferCache = this._audioBufferCache
+		if (audioBufferCache === null) {
+			return;
+		}
+		if (audioBufferCache.currentChunk === chunk) {
+			if (audioBufferCache.currentBuffer === null) {
+				audioBufferCache.currentBuffer = buffer
+			}
+		}
+		if (audioBufferCache.currentChunk?.next === chunk) {
+			if (audioBufferCache.nextBuffer === null) {
+				audioBufferCache.nextBuffer = buffer
+			}
+		}
+		if (audioBufferCache.currentChunk?.next?.next === chunk) {
+			if (audioBufferCache.pendingBuffer === null) {
+				audioBufferCache.pendingBuffer = buffer
+			}
+		}
+		this.tryResumePlayback()
+	}
+
+	// Start chunk decode
+	private decodeChunk(chunk: Chunk<Metadata> | null) {
+		if (chunk === null) {
+			return
+		}
+		if (chunk.ready) {
+			chunk.createBuffer().then((buffer) => {
+				this.onBufferDecoded(chunk, buffer)
+			})
+		} else {
+			chunk.once('ready', () => {
+				chunk.createBuffer().then((buffer) => {
+					this.onBufferDecoded(chunk, buffer)
+				})
+			})
+		}
+	}
+
+	// Attempt to resume playback when not actual Playing
+	private tryResumePlayback() {
+		if (this._actualPlaying || !this.playing) {
+			return
+		}
+		if (this._audioBufferCache === null) {
+			return
+		}
+		if (this.audioBufferCacheHit()) {
+			this.startPlay()
 		}
 	}
 }
