@@ -422,7 +422,7 @@ export default class Clip<Metadata> {
 			this._currentTime = currentTime;
 			this._audioBufferCache = null;
 			this.trySetupAudioBufferCache();
-			this.play();
+			this.play().catch(() => { });
 		} else {
 			this._currentTime = currentTime;
 			this._audioBufferCache = null;
@@ -733,11 +733,15 @@ export default class Clip<Metadata> {
 		if (chunk.ready) {
 			chunk.createBuffer().then((buffer) => {
 				this.onBufferDecoded(chunk, buffer)
+			}, (err) => {
+				this._fire("playbackerror", err)
 			})
 		} else {
 			chunk.once('ready', () => {
 				chunk.createBuffer().then((buffer) => {
 					this.onBufferDecoded(chunk, buffer)
+				}, (err) => {
+					this._fire("playbackerror", err)
 				})
 			})
 		}
