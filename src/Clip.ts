@@ -249,7 +249,7 @@ export default class Clip<Metadata> {
 						totalLoadedBytes += p;
 					}
 
-					const actualLoad=() => {
+					const actualLoad = () => {
 						if (!this.canplaythrough) {
 							this.canplaythrough = true;
 							this._fire('canplaythrough');
@@ -260,9 +260,9 @@ export default class Clip<Metadata> {
 						this.loaded = true;
 						this._fire('load');
 					}
-					if(this._chunks[0].ready){
+					if (this._chunks[0].ready) {
 						actualLoad();
-					}else{
+					} else {
 						this._chunks[0].once("ready", actualLoad);
 					}
 				},
@@ -397,10 +397,9 @@ export default class Clip<Metadata> {
 			return this;
 		}
 
+		this.resetAudioNodes();
 		this.playing = false;
 		this._actualPlaying = false;
-
-		this.resetAudioNodes();
 		this._fire('pause');
 
 		return this;
@@ -417,12 +416,12 @@ export default class Clip<Metadata> {
 	}
 
 	set currentTime(currentTime) {
+		console.log("Audio:phonograph", this.url, "set currentTime: ", currentTime)
 		if (this.playing) {
 			this.pause();
 			this._currentTime = currentTime;
 			this._audioBufferCache = null;
 			this.trySetupAudioBufferCache();
-			this.tryResumePlayback()
 			this.play();
 		} else {
 			this._currentTime = currentTime;
@@ -482,6 +481,7 @@ export default class Clip<Metadata> {
 					nextBuffer: null,
 					pendingBuffer: null,
 				}
+				console.trace("Audio:phonograph", this.url, "SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
 				console.log("Audio:phonograph", this.url, "SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
 				this.decodeChunk(chunk ?? null)
 				this.decodeChunk(chunk?.next ?? null)
@@ -675,6 +675,9 @@ export default class Clip<Metadata> {
 			this._nextGain.disconnect()
 			this._nextSource = null;
 		};
+		if (!this.playing || !this._actualPlaying) {
+			return
+		}
 		this._currentTime =
 			this._startTime + (this.context.currentTime - this._contextTimeAtStart);
 		this._audioBufferCache = null;
@@ -691,9 +694,9 @@ export default class Clip<Metadata> {
 		if (this.audioBufferCacheHit()) {
 			this.advanceAudioNodes();
 		} else {
-			this._actualPlaying = false;
 			console.log("Audio:phonograph", this.url, "AudioBufferCacheHit = false when advance")
 			this.resetAudioNodes();
+			this._actualPlaying = false;
 		}
 	}
 
