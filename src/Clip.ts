@@ -165,7 +165,6 @@ export default class Clip<Metadata> {
 				if (availableAudio > estimatedTimeToDownload) {
 					this.canplaythrough = true;
 					this._fire('canplaythrough');
-					console.log("Audio:phonograph", this.url, "canplaythrough")
 				}
 			};
 
@@ -253,10 +252,8 @@ export default class Clip<Metadata> {
 						if (!this.canplaythrough) {
 							this.canplaythrough = true;
 							this._fire('canplaythrough');
-							console.log("Audio:phonograph", this.url, "canplaythrough when load")
 						}
 
-						console.log("Audio:phonograph", this.url, "load")
 						this.loaded = true;
 						this._fire('load');
 					}
@@ -282,9 +279,7 @@ export default class Clip<Metadata> {
 			if (ready) {
 				fulfil();
 			} else {
-				console.log("Audio:phonograph", this.url, "not ready when buffer")
 				this.once(bufferToCompletion ? 'load' : 'canplaythrough', () => {
-					console.log("Audio:phonograph", this.url, "buffer complete by", bufferToCompletion ? 'load' : 'canplaythrough')
 					fulfil()
 				});
 				this.once('loaderror', reject);
@@ -416,7 +411,6 @@ export default class Clip<Metadata> {
 	}
 
 	set currentTime(currentTime) {
-		console.log("Audio:phonograph", this.url, "set currentTime: ", currentTime)
 		if (this.playing) {
 			this.pause();
 			this._currentTime = currentTime;
@@ -481,8 +475,6 @@ export default class Clip<Metadata> {
 					nextBuffer: null,
 					pendingBuffer: null,
 				}
-				console.trace("Audio:phonograph", this.url, "SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
-				console.log("Audio:phonograph", this.url, "SetupAudioBufferCache: ", this._chunks.indexOf(chunk))
 				this.decodeChunk(chunk ?? null)
 				this.decodeChunk(chunk?.next ?? null)
 				this.decodeChunk(chunk?.next?.next ?? null)
@@ -501,7 +493,6 @@ export default class Clip<Metadata> {
 				nextBuffer: null,
 				pendingBuffer: null,
 			}
-			console.log("Audio:phonograph", this.url, "SetupAudioBufferCache: -1")
 		}
 	}
 
@@ -553,7 +544,6 @@ export default class Clip<Metadata> {
 			nextBuffer: pendingBuffer,
 			pendingBuffer: null,
 		}
-		console.log("Audio:phonograph", this.url, "SetupAudioBufferCache: ", this._chunks.indexOf(currentChunk!.next!))
 		this.decodeChunk(currentChunk?.next?.next?.next ?? null)
 	}
 
@@ -561,7 +551,6 @@ export default class Clip<Metadata> {
 	private startPlay() {
 		this._startTime = this._currentTime
 		this._actualPlaying = true
-		console.log("Audio:phonograph", this.url, `Start play from: ${this._startTime}`)
 		const {
 			currentChunkStartTime,
 			currentChunk,
@@ -570,15 +559,9 @@ export default class Clip<Metadata> {
 		} = this._audioBufferCache!
 
 		this._contextTimeAtStart = this.context.currentTime
-		console.log("Audio:phonograph", this.url, `_contextTimeAtStart: ${this._contextTimeAtStart}`)
 		if (currentChunk !== null) {
 			this._pendingSourceStart = this._contextTimeAtStart + (currentChunk.duration! - (this._startTime - currentChunkStartTime));
 
-			console.log("Audio:phonograph", this.url, "=====")
-			console.log("Audio:phonograph", this.url, `play chunk: ${this._chunks.indexOf(currentChunk)}`)
-			console.log("Audio:phonograph", this.url, `offset: ${this._startTime - currentChunkStartTime}`)
-			console.log("Audio:phonograph", this.url, `from: ${this._contextTimeAtStart}`)
-			console.log("Audio:phonograph", this.url, `to: ${this._pendingSourceStart}`)
 			this._currentSource = this.context.createBufferSource();
 			this._currentSource.buffer = currentBuffer!;
 			this._currentGain = this.context.createGain();
@@ -590,10 +573,6 @@ export default class Clip<Metadata> {
 			this._currentSource.addEventListener("ended", this.onCurrentSourceEnd)
 			if (currentChunk.next !== null) {
 				const pendingStart = this._pendingSourceStart + currentChunk.next!.duration!;
-				console.log("Audio:phonograph", this.url, "=====")
-				console.log("Audio:phonograph", this.url, `play chunk: ${this._chunks.indexOf(currentChunk.next)}`)
-				console.log("Audio:phonograph", this.url, `from: ${this._pendingSourceStart}`)
-				console.log("Audio:phonograph", this.url, `to: ${pendingStart}`)
 				this._nextSource = this.context.createBufferSource();
 				this._nextSource.buffer = nextBuffer!;
 				this._nextGain = this.context.createGain();
@@ -629,10 +608,6 @@ export default class Clip<Metadata> {
 		} = this._audioBufferCache!
 		if ((currentChunk?.next ?? null) !== null) {
 			const pendingStart = this._pendingSourceStart + currentChunk?.next!.duration!;
-			console.log("Audio:phonograph", this.url, "=====")
-			console.log("Audio:phonograph", this.url, `play chunk: ${this._chunks.indexOf(currentChunk!.next!)}`)
-			console.log("Audio:phonograph", this.url, `from: ${this._pendingSourceStart}`)
-			console.log("Audio:phonograph", this.url, `to: ${pendingStart}`)
 			this._nextSource = this.context.createBufferSource();
 			this._nextSource.buffer = nextBuffer!;
 			this._nextGain = this.context.createGain();
@@ -686,7 +661,6 @@ export default class Clip<Metadata> {
 
 	// Advance to next Chunk if playback of current source ends
 	private onCurrentSourceEnd = () => {
-		console.log("Audio:phonograph", this.url, "CurrentSourceEnd")
 		if (!this.playing || !this._actualPlaying) {
 			return
 		}
@@ -694,7 +668,6 @@ export default class Clip<Metadata> {
 		if (this.audioBufferCacheHit()) {
 			this.advanceAudioNodes();
 		} else {
-			console.log("Audio:phonograph", this.url, "AudioBufferCacheHit = false when advance")
 			this.resetAudioNodes();
 			this._actualPlaying = false;
 		}
@@ -702,7 +675,6 @@ export default class Clip<Metadata> {
 
 	// Put audio buffer into AudioBufferCache when it is decoded
 	private onBufferDecoded(chunk: Chunk<Metadata>, buffer: IAudioBuffer) {
-		console.log("Audio:phonograph", this.url, "onBufferDecoded: ", this._chunks.indexOf(chunk))
 		const audioBufferCache = this._audioBufferCache
 		if (audioBufferCache === null) {
 			return;
